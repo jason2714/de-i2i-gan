@@ -13,7 +13,7 @@ class WGanModel(BaseModel):
         num_layers = int(math.log(image_size, 2)) - 3
         self.netG = WGanGenerator(num_layers=num_layers, ngf=opt.ngf, noise_dim=opt.noise_dim).to(opt.device)
         self.netD = WGanDiscriminator(num_layers=num_layers, ndf=opt.ndf).to(opt.device)
-        self.clipping_limit = 0.05
+        self.clipping_limit = 0.03
 
     def weight_clipping(self):
         # Clamp parameters to a range [-c, c], c=self.clipping_limit

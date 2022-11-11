@@ -26,6 +26,7 @@ class WGanTrainer:
         self.model.init_weights()
         self.optimizer = self._create_optimizer()
         self.losses = defaultdict(list)
+        self.dis_outputs = defaultdict(list)
         self.steps = 0
         self.fix_noise = torch.rand(opt.num_display_images, opt.noise_dim, 1, 1)
         if opt.use_default_name:
@@ -67,6 +68,10 @@ class WGanTrainer:
         for key, value in self.losses.items():
             scalar = sum(value) / len(value)
             writer.add_scalar(f'Loss/{key}', scalar, epoch)
+        # for discriminator outputs
+        writer.add_scalars(f'D(x)', {key: sum(value) / len(value)
+                                     for key, value in self.dis_outputs.items()
+                                     }, epoch)
         # for generated image
         generated_images = self._generate_image()
         # print(generated_images.shape)
@@ -74,14 +79,17 @@ class WGanTrainer:
         image_grid = make_grid(generated_images, nrow=nrow)
         writer.add_image('Generated Image', image_grid, epoch)
 
-    def train(self, data_loader):
+    def train(self, train_loader, val_loader=None):
         """
         epoch start with 1, end with num_epochs
         """
         writer = SummaryWriter(self.opt.log_dir / self.opt.name)
         for epoch in range(1, self.opt.num_epochs + 1):
             self.losses.clear()
-            self._train_epoch(data_loader, epoch)
+            self.dis_outputs.clear()
+            self._train_epoch(train_loader, epoch)
+            if val_loader is not None:
+                self._val_epoch(val_loader)
             self._write_tf_log(writer, epoch)
             if epoch % self.opt.save_epoch_freq == 0:
                 self.model.save(epoch)
@@ -103,8 +111,18 @@ class WGanTrainer:
                 self.model.save('latest')
             pbar.set_postfix(w_dis=f'{-sum(self.losses["gan_D"]) / len(self.losses["gan_D"]):.4f}',
                              g_loss=f'{sum(self.losses["gan_G"]) / (len(self.losses["gan_G"]) + 1e-12):.4f}')
-                             # ,
-                             # dis_grad=f'{max(self.losses["dis_grad"]):.4f}')
+            # ,
+            # dis_grad=f'{max(self.losses["dis_grad"]):.4f}')
+
+    @torch.no_grad()
+    def _val_epoch(self, data_loader):
+        pbar = tqdm(data_loader, colour='MAGENTA')
+        # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
+        for batch_data in pbar:
+            pbar.set_description('Validating... ')
+            batch_data = batch_data.to(self.opt.device)
+            val_logits = self.model.netD(batch_data)
+            self.dis_outputs['val'] += val_logits.flatten().tolist()
 
     def _train_generator_once(self, batch_size):
         self.optimizer['G'].zero_grad()
@@ -128,3 +146,5 @@ class WGanTrainer:
         d_loss.backward()
         self.optimizer['D'].step()
         self.losses['gan_D'].append(d_loss.item())
+        self.dis_outputs['real'] += real_logits.flatten().tolist()
+        self.dis_outputs['fake'] += fake_logits.flatten().tolist()

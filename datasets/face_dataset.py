@@ -4,9 +4,11 @@ from PIL import Image
 
 class FaceDataset(Dataset):
 
-    def __init__(self, opt, transform=None):
+    def __init__(self, opt, phase=None, transform=None):
         self.transform = transform
-        input_path = opt.input_dir / opt.phase
+        if phase is None:
+            phase = opt.phase
+        input_path = opt.input_dir / phase
         self.filenames = [filename for filename in input_path.iterdir() if filename.suffix == '.png']
         self.filenames.sort()
         self.len = len(self.filenames)
