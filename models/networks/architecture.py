@@ -1,7 +1,9 @@
 import logging
 
 from torch import nn
-import torch.nn.utils.spectral_norm as spectral_norm
+from torch.nn.utils import spectral_norm
+import torch.nn.functional as F
+from .normalization import SPADE
 
 
 def get_act_layer(act_str):
@@ -33,7 +35,7 @@ class DeConvBlock(nn.Module):
                  act_layer='relu',
                  use_spectral=False):
         """
-            valid_padding_strings = {'same', 'valid'}
+            valid_padding_strings = {'same', 'valid', int}
             valid_padding_modes = {'zeros', 'reflect', 'replicate', 'circular'}
             valid_activation_strings = {'leaky_relu', 'relu', 'sigmoid', 'tanh'}
         """
@@ -59,7 +61,7 @@ class DeConvBlock(nn.Module):
         if use_spectral:
             for idx, layer in enumerate(blocks):
                 if isinstance(layer, (nn.Conv2d, nn.Linear)):
-                    blocks[idx] = nn.utils.spectral_norm(layer)
+                    blocks[idx] = spectral_norm(layer)
         self.de_conv_block = nn.Sequential(*blocks)
 
     def forward(self, x):
@@ -100,7 +102,7 @@ class ConvBlock(nn.Module):
         if use_spectral:
             for idx, layer in enumerate(blocks):
                 if isinstance(layer, (nn.Conv2d, nn.Linear)):
-                    blocks[idx] = nn.utils.spectral_norm(layer)
+                    blocks[idx] = spectral_norm(layer)
 
         self.conv_block = nn.Sequential(*blocks)
 
@@ -148,3 +150,58 @@ class ResBlock(nn.Module):
     def forward(self, x):
         out = self.res_block(x)
         return out + x
+
+
+class SPADEResBlock(nn.Module):
+    def __init__(self, label_nc, f_in, f_out,
+                 kernel_size=(3, 3),
+                 stride=(1, 1),
+                 padding=0,
+                 padding_mode='zeros',
+                 bias=False,
+                 up_scale=False,
+                 norm_layer=nn.InstanceNorm2d,
+                 act_layer='relu'):
+        """
+            valid_padding_strings = {'same', 'valid', int}
+            valid_padding_modes = {'zeros', 'reflect', 'replicate', 'circular'}
+            valid_activation_strings = {'leaky_relu', 'relu', 'sigmoid', 'tanh'}
+        """
+        super(SPADEResBlock, self).__init__()
+        self.up = nn.Identity()
+        if up_scale:
+            self.up = nn.Upsample(scale_factor=2)
+
+        f_mid = min(f_in, f_out)
+        self.spade_norm_0 = SPADE(label_nc, f_in,
+                                  kernel_size=kernel_size,
+                                  padding=padding,
+                                  norm_layer=norm_layer)
+        self.spade_norm_1 = SPADE(label_nc, f_mid,
+                                  kernel_size=kernel_size,
+                                  padding=padding,
+                                  norm_layer=norm_layer)
+        self.act_0 = get_act_layer(act_layer)
+        self.act_1 = get_act_layer(act_layer)
+        self.conv_0 = nn.Conv2d(f_in, f_mid,
+                                kernel_size=kernel_size,
+                                stride=stride,
+                                padding=padding,
+                                padding_mode=padding_mode,
+                                bias=bias)
+        self.conv_1 = nn.Conv2d(f_mid, f_out,
+                                kernel_size=kernel_size,
+                                stride=stride,
+                                padding=padding,
+                                padding_mode=padding_mode,
+                                bias=bias)
+
+    def forward(self, x, seg):
+        x = self.up(x)
+        x = self.spade_norm_0(x, seg)
+        x = self.act_0(x)
+        x = self.conv_0(x)
+        x = self.spade_norm_1(x, seg)
+        x = self.act_0(x)
+        x = self.conv_0(x)
+        return x

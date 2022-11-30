@@ -1,5 +1,5 @@
 from models.networks.base_network import BaseNetwork
-from models.networks.architecture import DeConvBlock, ConvBlock, ResBlock
+from models.networks.architecture import DeConvBlock, ConvBlock, ResBlock, SPADEResBlock
 import torch
 from torch import nn
 import math
@@ -41,7 +41,7 @@ class WGanGenerator(BaseNetwork):
 
 
 class DefectGanGenerator(BaseNetwork):
-    def __init__(self, num_scales=2, num_res=6, ngf=64, noise_dim=100, input_dim=3, use_spectral=True):
+    def __init__(self, label_nc, num_scales=2, num_res=6, ngf=64, input_dim=3, use_spectral=True):
         """
             image to image translation network
 
@@ -87,23 +87,39 @@ class DefectGanGenerator(BaseNetwork):
 
         # decoder
         for i in range(num_res // 2, num_res):
-            dec_res_blk.append(ResBlock(crt_dim, crt_dim,
-                                        kernel_size=(3, 3),
-                                        stride=(1, 1),
-                                        padding='same',
-                                        padding_mode='reflect',
-                                        norm_layer=nn.InstanceNorm2d,
-                                        act_layer='relu',
-                                        use_spectral=use_spectral))
+            # dec_res_blk.append(ResBlock(crt_dim, crt_dim,
+            #                             kernel_size=(3, 3),
+            #                             stride=(1, 1),
+            #                             padding='same',
+            #                             padding_mode='reflect',
+            #                             norm_layer=nn.InstanceNorm2d,
+            #                             act_layer='relu',
+            #                             use_spectral=use_spectral))
+            dec_res_blk.append(SPADEResBlock(label_nc, crt_dim, crt_dim,
+                                             kernel_size=(3, 3),
+                                             stride=(1, 1),
+                                             padding='same',
+                                             padding_mode='reflect',
+                                             up_scale=False,
+                                             norm_layer=nn.InstanceNorm2d,
+                                             act_layer='relu'))
         for i in range(num_scales):
-            de_conv_blk.append(DeConvBlock(crt_dim, crt_dim // 2,
-                                           kernel_size=(4, 4),
-                                           stride=(1, 1),
-                                           padding='same',
-                                           padding_mode='reflect',
-                                           norm_layer=nn.InstanceNorm2d,
-                                           act_layer='relu',
-                                           use_spectral=use_spectral))
+            # de_conv_blk.append(DeConvBlock(crt_dim, crt_dim // 2,
+            #                                kernel_size=(4, 4),
+            #                                stride=(1, 1),
+            #                                padding='same',
+            #                                padding_mode='reflect',
+            #                                norm_layer=nn.InstanceNorm2d,
+            #                                act_layer='relu',
+            #                                use_spectral=use_spectral))
+            de_conv_blk.append(SPADEResBlock(label_nc, crt_dim, crt_dim // 2,
+                                             kernel_size=(3, 3),
+                                             stride=(1, 1),
+                                             padding='same',
+                                             padding_mode='reflect',
+                                             up_scale=True,
+                                             norm_layer=nn.InstanceNorm2d,
+                                             act_layer='relu'))
             crt_dim //= 2
         # original kernel size is 7
         head = DeConvBlock(crt_dim, 3,
@@ -128,10 +144,10 @@ class DefectGanGenerator(BaseNetwork):
         self.enc_blk = [stem, *conv_blk, *enc_res_blk]
         self.dec_blk = [*dec_res_blk, *de_conv_blk, head]
 
-    def forward(self, x):
+    def forward(self, x, label):
         assert isinstance(x, torch.Tensor), "x must be Original Images: Torch.Tensor"
         for enc_blk in self.enc_blk:
             x = enc_blk(x)
         for dec_blk in self.dec_blk:
-            x = dec_blk(x)
+            x = dec_blk(x, label)
         return x
