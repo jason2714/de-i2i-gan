@@ -41,16 +41,17 @@ class WGanGenerator(BaseNetwork):
 
 
 class DefectGanGenerator(BaseNetwork):
-    def __init__(self, label_nc, num_scales=2, num_res=6, ngf=64, input_dim=3, use_spectral=True):
+    def __init__(self, label_nc, input_nc=3, num_scales=2, num_res=6, ngf=64, use_spectral=True):
         """
             image to image translation network
 
         """
         super().__init__()
-        # TODO SPADE, SPATIAL CONTROL MAP, ADAPTIVE NOISE
+        # TODO ADD SPADE, SPATIAL_DISTRIBUTION_MAP, ADAPTIVE_NOISE
         assert (num_res & 1) == 0, 'num_res must be even'
         crt_dim = ngf
         # self.noise_dim = noise_dim
+        self.label_nc = label_nc
         self.enc_blk = []
         self.dec_blk = []
         conv_blk = []
@@ -58,13 +59,13 @@ class DefectGanGenerator(BaseNetwork):
         enc_res_blk = []
         dec_res_blk = []
         # encoder
-        stem = ConvBlock(input_dim, crt_dim,
-                         kernel_size=(7, 7),
-                         padding='same',
-                         padding_mode='reflect',
-                         norm_layer=nn.BatchNorm2d,
-                         act_layer='leaky_relu',
-                         use_spectral=use_spectral)
+        self.stem = ConvBlock(input_nc, crt_dim,
+                              kernel_size=(7, 7),
+                              padding='same',
+                              padding_mode='reflect',
+                              norm_layer=nn.BatchNorm2d,
+                              act_layer='leaky_relu',
+                              use_spectral=use_spectral)
         for i in range(num_scales):
             conv_blk.append(ConvBlock(crt_dim, crt_dim * 2,
                                       kernel_size=(4, 4),
@@ -102,7 +103,8 @@ class DefectGanGenerator(BaseNetwork):
                                              padding_mode='reflect',
                                              up_scale=False,
                                              norm_layer=nn.InstanceNorm2d,
-                                             act_layer='relu'))
+                                             act_layer='relu',
+                                             use_spectral=use_spectral))
         for i in range(num_scales):
             # de_conv_blk.append(DeConvBlock(crt_dim, crt_dim // 2,
             #                                kernel_size=(4, 4),
@@ -119,16 +121,27 @@ class DefectGanGenerator(BaseNetwork):
                                              padding_mode='reflect',
                                              up_scale=True,
                                              norm_layer=nn.InstanceNorm2d,
-                                             act_layer='relu'))
+                                             act_layer='relu',
+                                             use_spectral=use_spectral))
             crt_dim //= 2
         # original kernel size is 7
-        head = DeConvBlock(crt_dim, 3,
-                           kernel_size=(3, 3),
-                           padding='same',
-                           padding_mode='reflect',
-                           norm_layer=None,
-                           act_layer='tanh',
-                           use_spectral=False)
+        self.foreground_head = DeConvBlock(crt_dim, 3,
+                                           kernel_size=(3, 3),
+                                           padding='same',
+                                           padding_mode='reflect',
+                                           up_scale=False,
+                                           norm_layer=None,
+                                           act_layer='tanh',
+                                           use_spectral=False)
+        # TODO may be 1 or 3
+        self.distribution_head = DeConvBlock(crt_dim, 1,
+                                             kernel_size=(3, 3),
+                                             padding='same',
+                                             padding_mode='reflect',
+                                             up_scale=False,
+                                             norm_layer=None,
+                                             act_layer='sigmoid',
+                                             use_spectral=False)
 
         # for skip and mix
         # skip_conv_blk.append(ConvBlock(crt_dim * 2, crt_dim,
@@ -141,13 +154,18 @@ class DefectGanGenerator(BaseNetwork):
         #                               use_spectral=False))
         # mix_conv_blk = []
         # skip_conv_blk = []
-        self.enc_blk = [stem, *conv_blk, *enc_res_blk]
-        self.dec_blk = [*dec_res_blk, *de_conv_blk, head]
+        self.enc_blk = [*conv_blk, *enc_res_blk]
+        self.dec_blk = [*dec_res_blk, *de_conv_blk]
 
     def forward(self, x, label):
         assert isinstance(x, torch.Tensor), "x must be Original Images: Torch.Tensor"
+        org_x = x
+        x = self.stem(x)
         for enc_blk in self.enc_blk:
             x = enc_blk(x)
         for dec_blk in self.dec_blk:
             x = dec_blk(x, label)
-        return x
+        foreground = self.foreground_head(x)
+        spatial_distribution = self.distribution_head(x)
+        output = org_x * (1 - spatial_distribution) + foreground * spatial_distribution
+        return [output, foreground, spatial_distribution]

@@ -161,16 +161,16 @@ class SPADEResBlock(nn.Module):
                  bias=False,
                  up_scale=False,
                  norm_layer=nn.InstanceNorm2d,
-                 act_layer='relu'):
+                 act_layer='relu',
+                 use_spectral=False):
         """
             valid_padding_strings = {'same', 'valid', int}
             valid_padding_modes = {'zeros', 'reflect', 'replicate', 'circular'}
             valid_activation_strings = {'leaky_relu', 'relu', 'sigmoid', 'tanh'}
         """
         super(SPADEResBlock, self).__init__()
-        self.up = nn.Identity()
-        if up_scale:
-            self.up = nn.Upsample(scale_factor=2)
+        self.up = nn.Upsample(scale_factor=2)
+        self.up_scale = up_scale
 
         f_mid = min(f_in, f_out)
         self.spade_norm_0 = SPADE(label_nc, f_in,
@@ -195,9 +195,13 @@ class SPADEResBlock(nn.Module):
                                 padding=padding,
                                 padding_mode=padding_mode,
                                 bias=bias)
+        if use_spectral:
+            self.conv_0 = spectral_norm(self.conv_0)
+            self.conv_1 = spectral_norm(self.conv_1)
 
     def forward(self, x, seg):
-        x = self.up(x)
+        if self.up_scale:
+            x = self.up(x)
         x = self.spade_norm_0(x, seg)
         x = self.act_0(x)
         x = self.conv_0(x)
