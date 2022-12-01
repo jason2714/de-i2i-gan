@@ -155,12 +155,12 @@ class DefectGanGenerator(BaseNetwork):
         # TODO skip and mix
         # mix_conv_blk = []
         # skip_conv_blk = []
-        self.enc_blk = [*conv_blk, *enc_res_blk]
-        self.dec_blk = [*dec_res_blk, *de_conv_blk]
+        self.enc_blk = nn.Sequential(*conv_blk, *enc_res_blk)
+        self.dec_blk = nn.Sequential(*dec_res_blk, *de_conv_blk)
 
     def forward(self, x, label):
         assert isinstance(x, torch.Tensor), "x must be Original Images: Torch.Tensor"
-        org_x = x
+        x, label = x.to(self.device), label.to(self.device)
         x = self.stem(x)
         for enc_blk in self.enc_blk:
             x = enc_blk(x)
@@ -168,5 +168,4 @@ class DefectGanGenerator(BaseNetwork):
             x = dec_blk(x, label)
         foreground = self.foreground_head(x)
         spatial_distribution = self.distribution_head(x)
-        output = org_x * (1 - spatial_distribution) + foreground * spatial_distribution
-        return [output, foreground, spatial_distribution]
+        return spatial_distribution, foreground
