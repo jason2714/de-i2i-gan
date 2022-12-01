@@ -16,12 +16,12 @@ class BaseOptions:
 
         parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
         parser.add_argument('--ckpt_dir', type=Path, default='./ckpt', help='models are saved here')
-        parser.add_argument('--model', type=str, default='defectgan', help='which model to use')
+        parser.add_argument('--model', type=str, default='wgan', help='which model to use')
         parser.add_argument('--phase', type=str, default='train', help='train, val, test, etc')
 
         # input/output sizes
-        parser.add_argument('--batch_size', type=int, default=4, help='input batch size')
-        parser.add_argument('--image_size', type=int, default=128, help='input image size')
+        parser.add_argument('--batch_size', type=int, default=128, help='input batch size')
+        parser.add_argument('--image_size', type=int, default=64, help='input image size')
         parser.add_argument('--input_nc', type=int, default=3, help='# of input image channels')
         parser.add_argument('--output_nc', type=int, default=3, help='# of output image channels')
 
@@ -37,11 +37,12 @@ class BaseOptions:
                             help='variance of the initialization distribution')
 
         # for generator
-        # parser.add_argument('--netG', type=str, default='defectgan', help='selects model to use for netG (wgan)')
+        parser.add_argument('--netG', type=str, default='wgan', help='selects model to use for netG (wgan)')
         parser.add_argument('--ngf', type=int, default=64, help='# of gen filters in last conv layer')
+        parser.add_argument('--noise_dim', type=int, default=100, help="dimension of the latent z vector")
 
         # for discriminator
-        # parser.add_argument('--netD', type=str, default='defectgan', help='selects model to use for netG (wgan)')
+        parser.add_argument('--netD', type=str, default='wgan', help='selects model to use for netG (wgan)')
         parser.add_argument('--ndf', type=int, default=64, help='# of dis filters in first conv layer')
 
         self.initialized = True

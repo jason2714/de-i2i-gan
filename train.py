@@ -5,13 +5,14 @@ from datasets.face_dataset import FaceDataset
 from utils.util import worker_init_fn
 from torchvision import transforms
 from utils.util import fix_rand_seed
+from trainers import find_trainer_using_model_name
 
 
 def main():
     fix_rand_seed()
     opt = TrainOptions().parse()
 
-    trainer = WGanTrainer(opt)
+    trainer = find_trainer_using_model_name(opt.model)(opt)
     val_loader = None
     train_transform = transforms.Compose([
         transforms.RandomHorizontalFlip(0.5),
