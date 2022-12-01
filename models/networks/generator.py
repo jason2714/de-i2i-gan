@@ -41,13 +41,13 @@ class WGanGenerator(BaseNetwork):
 
 
 class DefectGanGenerator(BaseNetwork):
-    def __init__(self, label_nc, input_nc=3, num_scales=2, num_res=6, ngf=64, use_spectral=True):
+    def __init__(self, label_nc, input_nc=3, num_scales=2, num_res=6, ngf=64, use_spectral=True, add_noise=True):
         """
             image to image translation network
 
         """
         super().__init__()
-        # TODO ADD SPADE, SPATIAL_DISTRIBUTION_MAP, ADAPTIVE_NOISE
+        # DONE ADD SPADE, SPATIAL_DISTRIBUTION_MAP, ADAPTIVE_NOISE
         assert (num_res & 1) == 0, 'num_res must be even'
         crt_dim = ngf
         # self.noise_dim = noise_dim
@@ -65,7 +65,8 @@ class DefectGanGenerator(BaseNetwork):
                               padding_mode='reflect',
                               norm_layer=nn.BatchNorm2d,
                               act_layer='leaky_relu',
-                              use_spectral=use_spectral)
+                              use_spectral=use_spectral,
+                              add_noise=add_noise)
         for i in range(num_scales):
             conv_blk.append(ConvBlock(crt_dim, crt_dim * 2,
                                       kernel_size=(4, 4),
@@ -74,7 +75,8 @@ class DefectGanGenerator(BaseNetwork):
                                       padding_mode='reflect',
                                       norm_layer=nn.BatchNorm2d,
                                       act_layer='leaky_relu',
-                                      use_spectral=use_spectral))
+                                      use_spectral=use_spectral,
+                                      add_noise=add_noise))
             crt_dim *= 2
         for i in range(num_res // 2):
             enc_res_blk.append(ResBlock(crt_dim, crt_dim,
@@ -84,7 +86,8 @@ class DefectGanGenerator(BaseNetwork):
                                         padding_mode='reflect',
                                         norm_layer=nn.BatchNorm2d,
                                         act_layer='leaky_relu',
-                                        use_spectral=use_spectral))
+                                        use_spectral=use_spectral,
+                                        add_noise=add_noise))
 
         # decoder
         for i in range(num_res // 2, num_res):
@@ -95,7 +98,8 @@ class DefectGanGenerator(BaseNetwork):
             #                             padding_mode='reflect',
             #                             norm_layer=nn.InstanceNorm2d,
             #                             act_layer='relu',
-            #                             use_spectral=use_spectral))
+            #                             use_spectral=use_spectral,
+            #                             add_noise=add_noise))
             dec_res_blk.append(SPADEResBlock(label_nc, crt_dim, crt_dim,
                                              kernel_size=(3, 3),
                                              stride=(1, 1),
@@ -104,7 +108,8 @@ class DefectGanGenerator(BaseNetwork):
                                              up_scale=False,
                                              norm_layer=nn.InstanceNorm2d,
                                              act_layer='relu',
-                                             use_spectral=use_spectral))
+                                             use_spectral=use_spectral,
+                                             add_noise=add_noise))
         for i in range(num_scales):
             # de_conv_blk.append(DeConvBlock(crt_dim, crt_dim // 2,
             #                                kernel_size=(4, 4),
@@ -113,7 +118,8 @@ class DefectGanGenerator(BaseNetwork):
             #                                padding_mode='reflect',
             #                                norm_layer=nn.InstanceNorm2d,
             #                                act_layer='relu',
-            #                                use_spectral=use_spectral))
+            #                                use_spectral=use_spectral,
+            #                                add_noise=add_noise))
             de_conv_blk.append(SPADEResBlock(label_nc, crt_dim, crt_dim // 2,
                                              kernel_size=(3, 3),
                                              stride=(1, 1),
@@ -122,7 +128,8 @@ class DefectGanGenerator(BaseNetwork):
                                              up_scale=True,
                                              norm_layer=nn.InstanceNorm2d,
                                              act_layer='relu',
-                                             use_spectral=use_spectral))
+                                             use_spectral=use_spectral,
+                                             add_noise=add_noise))
             crt_dim //= 2
         # original kernel size is 7
         self.foreground_head = DeConvBlock(crt_dim, 3,
@@ -132,7 +139,8 @@ class DefectGanGenerator(BaseNetwork):
                                            up_scale=False,
                                            norm_layer=None,
                                            act_layer='tanh',
-                                           use_spectral=False)
+                                           use_spectral=False,
+                                           add_noise=False)
         # TODO may be 1 or 3
         self.distribution_head = DeConvBlock(crt_dim, 1,
                                              kernel_size=(3, 3),
@@ -141,17 +149,10 @@ class DefectGanGenerator(BaseNetwork):
                                              up_scale=False,
                                              norm_layer=None,
                                              act_layer='sigmoid',
-                                             use_spectral=False)
+                                             use_spectral=False,
+                                             add_noise=False)
 
-        # for skip and mix
-        # skip_conv_blk.append(ConvBlock(crt_dim * 2, crt_dim,
-        #                               kernel_size=(3, 3),
-        #                               stride=(1, 1),
-        #                               padding='same',
-        #                               padding_mode='reflect',
-        #                               norm_layer=nn.InstanceNorm2d,
-        #                               act_layer='relu',
-        #                               use_spectral=False))
+        # TODO skip and mix
         # mix_conv_blk = []
         # skip_conv_blk = []
         self.enc_blk = [*conv_blk, *enc_res_blk]

@@ -1,5 +1,5 @@
 import logging
-
+import torch
 from torch import nn
 from torch.nn.utils import spectral_norm
 import torch.nn.functional as F
@@ -33,7 +33,8 @@ class DeConvBlock(nn.Module):
                  up_scale=True,
                  norm_layer=nn.InstanceNorm2d,
                  act_layer='relu',
-                 use_spectral=False):
+                 use_spectral=False,
+                 add_noise=False):
         """
             valid_padding_strings = {'same', 'valid', int}
             valid_padding_modes = {'zeros', 'reflect', 'replicate', 'circular'}
@@ -51,6 +52,9 @@ class DeConvBlock(nn.Module):
                                 padding_mode=padding_mode,
                                 bias=bias))
 
+        # adaptive noise insert
+        if add_noise:
+            blocks.append(NoiseInjection())
         # add normalization layer
         if norm_layer is not None:
             blocks.append(norm_layer(f_out))
@@ -78,7 +82,8 @@ class ConvBlock(nn.Module):
                  bias=False,
                  norm_layer=nn.BatchNorm2d,
                  act_layer='relu',
-                 use_spectral=False):
+                 use_spectral=False,
+                 add_noise=False):
         """
             valid_padding_strings = {'same', 'valid'}
             valid_padding_modes = {'zeros', 'reflect', 'replicate', 'circular'}
@@ -91,6 +96,10 @@ class ConvBlock(nn.Module):
                             padding=padding,
                             padding_mode=padding_mode,
                             bias=bias)]
+
+        # adaptive noise insert
+        if add_noise:
+            blocks.append(NoiseInjection())
 
         # add normalization layer
         if norm_layer is not None:
@@ -120,7 +129,8 @@ class ResBlock(nn.Module):
                  bias=False,
                  norm_layer=nn.InstanceNorm2d,
                  act_layer='relu',
-                 use_spectral=False):
+                 use_spectral=False,
+                 add_noise=False):
         """
             valid_padding_strings = {'same', 'valid'}
             valid_padding_modes = {'zeros', 'reflect', 'replicate', 'circular'}
@@ -135,7 +145,8 @@ class ResBlock(nn.Module):
                             bias=bias,
                             norm_layer=norm_layer,
                             act_layer=act_layer,
-                            use_spectral=use_spectral),
+                            use_spectral=use_spectral,
+                            add_noise=add_noise),
                   ConvBlock(f_out, f_out,
                             kernel_size=kernel_size,
                             stride=stride,
@@ -144,7 +155,8 @@ class ResBlock(nn.Module):
                             bias=bias,
                             norm_layer=norm_layer,
                             act_layer=None,
-                            use_spectral=use_spectral)]
+                            use_spectral=use_spectral,
+                            add_noise=add_noise)]
         self.res_block = nn.Sequential(*blocks)
 
     def forward(self, x):
@@ -162,7 +174,8 @@ class SPADEResBlock(nn.Module):
                  up_scale=False,
                  norm_layer=nn.InstanceNorm2d,
                  act_layer='relu',
-                 use_spectral=False):
+                 use_spectral=False,
+                 add_noise=False):
         """
             valid_padding_strings = {'same', 'valid', int}
             valid_padding_modes = {'zeros', 'reflect', 'replicate', 'circular'}
@@ -171,6 +184,9 @@ class SPADEResBlock(nn.Module):
         super(SPADEResBlock, self).__init__()
         self.up = nn.Upsample(scale_factor=2)
         self.up_scale = up_scale
+        self.add_noise = add_noise
+        self.noise_0 = NoiseInjection()
+        self.noise_1 = NoiseInjection()
 
         f_mid = min(f_in, f_out)
         self.spade_norm_0 = SPADE(label_nc, f_in,
@@ -205,7 +221,31 @@ class SPADEResBlock(nn.Module):
         x = self.spade_norm_0(x, seg)
         x = self.act_0(x)
         x = self.conv_0(x)
+        if self.add_noise:
+            x = self.noise_0(x)
         x = self.spade_norm_1(x, seg)
         x = self.act_0(x)
         x = self.conv_0(x)
+        if self.add_noise:
+            x = self.noise_1(x)
         return x
+
+
+class NoiseInjection(nn.Module):
+    def __init__(self, weight_type='constant', nc=None):
+        super(NoiseInjection, self).__init__()
+        if weight_type == 'constant':
+            self.weight = nn.Parameter(torch.zeros(1))
+        elif weight_type == 'vector':
+            assert nc is not None, "num_channel shouldn't be None"
+            self.weight = nn.Parameter(torch.zeros(nc))
+        else:
+            raise NameError(f'weight type named {weight_type} not defined')
+
+    def forward(self, image, noise=None):
+        if noise is None:
+            batch, _, height, width = image.shape
+            noise = image.new_empty(batch, 1, height, width).normal_()
+        self.weight = torch.reshape(self.weight, (1, -1, 1, 1))
+        return image + self.weight * noise
+
