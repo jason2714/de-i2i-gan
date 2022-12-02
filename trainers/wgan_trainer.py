@@ -12,22 +12,17 @@ import inspect
 from models import find_model_using_name
 from torch.autograd import grad, Variable
 
+from trainers.base_trainer import BaseTrainer
 
-class WGanTrainer:
+
+class WGanTrainer(BaseTrainer):
     """
-    Trainer receives the options and optimizers, and uses them to
-    updates the weights of the network while reporting losses
-    and the latest visuals to visualize the progress in training.
+    BaseTrainer receives the options and initialize optimizers, models, losses, step
     """
 
     def __init__(self, opt):
-        self.opt = opt
-        self.model = find_model_using_name(opt.model)(opt)
-        self.model.init_weights()
-        self.optimizer = self._create_optimizer()
-        self.losses = defaultdict(list)
+        super().__init__(opt)
         self.dis_outputs = defaultdict(list)
-        self.steps = 0
         self.fix_noise = torch.rand(opt.num_display_images, opt.noise_dim, 1, 1)
         if opt.use_default_name:
             self.opt.name += f'_{self.model.clipping_limit}'
@@ -55,16 +50,6 @@ class WGanTrainer:
         # print(fake_data.min(), fake_data.max())
         # exit()
         return fake_data
-
-    def _create_optimizer(self):
-        assert isinstance(self.opt.lr, (int, float, dict)), 'type of lr should be scalar or dict'
-        optimizer = {
-            network_name: optim.RMSprop(network.parameters(),
-                                        lr=self.opt.lr[network_name] if isinstance(self.opt.lr, dict)
-                                        else self.opt.lr)
-            for network_name, network in self.model.networks.items()
-        }
-        return optimizer
 
     def _write_tf_log(self, writer, epoch):
         # for losses
@@ -128,26 +113,26 @@ class WGanTrainer:
             self.dis_outputs['val'] += val_logits.flatten().tolist()
 
     def _train_generator_once(self, batch_size):
-        self.optimizer['G'].zero_grad()
+        self.optimizers['G'].zero_grad()
         fake_data = self.model.netG(batch_size)
         fake_logits = self.model.netD(fake_data)
         g_loss = -fake_logits.mean()
         g_loss.backward()
-        self.optimizer['G'].step()
+        self.optimizers['G'].step()
         self.losses['gan_G'].append(g_loss.item())
 
     def _train_discriminator_once(self, real_data):
         self.model.weight_clipping()
-        self.optimizer['D'].zero_grad()
+        self.optimizers['D'].zero_grad()
         fake_data = self.model.netG(real_data.shape[0])
         fake_logits = self.model.netD(fake_data)
         real_logits = self.model.netD(real_data)
         w_distance = real_logits.mean() - fake_logits.mean()
         d_loss = -w_distance
         # self.losses['dis_grad'].append(self._cal_dis_grad(real_data, fake_data))
-        # self.optimizer['D'].zero_grad()
+        # self.optimizers['D'].zero_grad()
         d_loss.backward()
-        self.optimizer['D'].step()
+        self.optimizers['D'].step()
         self.losses['gan_D'].append(d_loss.item())
         self.dis_outputs['real'] += real_logits.flatten().tolist()
         self.dis_outputs['fake'] += fake_logits.flatten().tolist()

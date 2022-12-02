@@ -47,8 +47,10 @@ class TrainOptions(WGanBaseOptions, BaseTrainOptions):
         parser = BaseTrainOptions.initialize(self, parser)
 
         # for training
+        parser.add_argument('--optimizer', type=str, default='rmsprop',
+                            help='type of optimizer [sgd|rmsprop|adam|adamw]')
         parser.add_argument('--num_epochs', type=int, default=120, help='how many epochs for learning')
-        parser.add_argument('--lr', type=float, default=5e-5, help='initial learning rate for adam')
+        parser.add_argument('--lr', type=float, default=5e-5, help='initial learning rate for optimizer')
         # parser.add_argument('--niter_decay', type=int, default=0,
         #                     help='# of iter to linearly decay learning rate to zero')
         parser.add_argument('--num_critics', type=int, default=5,
