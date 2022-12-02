@@ -2,13 +2,11 @@ from options.base_options import BaseOptions
 from pathlib import Path
 
 
-class TrainOptions(BaseOptions):
+class BaseTrainOptions:
     def __init__(self):
-        super(TrainOptions, self).__init__()
         self.isTrain = True
 
     def initialize(self, parser):
-        parser = super(TrainOptions, self).initialize(parser)
         # for displays
         parser.add_argument('--num_display_images', type=int, default=64,
                             help='# of display images')
@@ -33,3 +31,4 @@ class TrainOptions(BaseOptions):
         # parser.add_argument('--log_comment', type=str, required=True, help='comment of tensorboard log')
 
         return parser
+

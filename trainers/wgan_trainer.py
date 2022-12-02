@@ -57,8 +57,11 @@ class WGanTrainer:
         return fake_data
 
     def _create_optimizer(self):
+        assert isinstance(self.opt.lr, (int, float, dict)), 'type of lr should be scalar or dict'
         optimizer = {
-            network_name: optim.RMSprop(network.parameters(), lr=self.opt.lr)
+            network_name: optim.RMSprop(network.parameters(),
+                                        lr=self.opt.lr[network_name] if isinstance(self.opt.lr, dict)
+                                        else self.opt.lr)
             for network_name, network in self.model.networks.items()
         }
         return optimizer

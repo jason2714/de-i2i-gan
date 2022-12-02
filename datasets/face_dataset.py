@@ -8,7 +8,7 @@ class FaceDataset(Dataset):
         self.transform = transform
         if phase is None:
             phase = opt.phase
-        input_path = opt.input_dir / phase
+        input_path = opt.data_dir / opt.dataset_name / phase
         self.filenames = [filename for filename in input_path.iterdir() if filename.suffix == '.png']
         self.filenames.sort()
         self.len = len(self.filenames)

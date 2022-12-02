@@ -14,9 +14,9 @@ class BaseOptions:
         parser.add_argument('--name', type=str, default='exp',
                             help='name of the experiment. It decides where to store samples and models')
 
+        parser.add_argument('--model', type=str, required=True, help='which model to use')
         parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
         parser.add_argument('--ckpt_dir', type=Path, default='./ckpt', help='models are saved here')
-        parser.add_argument('--model', type=str, default='defectgan', help='which model to use')
         parser.add_argument('--phase', type=str, default='train', help='train, val, test, etc')
 
         # input/output sizes
@@ -26,7 +26,8 @@ class BaseOptions:
         parser.add_argument('--output_nc', type=int, default=3, help='# of output image channels')
 
         # for setting inputs
-        parser.add_argument('--input_dir', type=Path, default='./data/face')
+        parser.add_argument('--data_dir', type=Path, default='./data/')
+        parser.add_argument('--dataset_name', type=str, required=True, help='which dataset to use')
         parser.add_argument('--load_from_opt_file', action='store_true',
                             help='load the options from checkpoints and use that as default')
 
@@ -41,7 +42,7 @@ class BaseOptions:
         parser.add_argument('--ngf', type=int, default=64, help='# of gen filters in last conv layer')
 
         # for discriminator
-        # parser.add_argument('--netD', type=str, default='defectgan', help='selects model to use for netG (wgan)')
+        # parser.add_argument('--netD', type=str, default='defectgan', help='selects model to use for netD (wgan)')
         parser.add_argument('--ndf', type=int, default=64, help='# of dis filters in first conv layer')
 
         self.initialized = True
@@ -49,8 +50,10 @@ class BaseOptions:
 
     def gather_options(self):
         # initialize parser with basic options
+        # set conflict_handler to 'resolve' will enable arguments overriding
         if not self.initialized:
             parser = argparse.ArgumentParser(
+                conflict_handler='resolve',
                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
             parser = self.initialize(parser)
 
