@@ -21,6 +21,12 @@ class BaseModel:
         key: network_name
         value: network_instance
         """
+        # attributes = inspect.getmembers(self, lambda attr: not (inspect.isroutine(attr)))
+        # networks_dict = {
+        #     attr[0].replace(network_prefix, ''): attr[1]
+        #     for attr in attributes
+        #     if attr[0].startswith(network_prefix) and not (attr[0].startswith('__') and attr[0].endswith('__'))
+        # }
         networks = {
             attr_name.replace(self.network_prefix, ''): attr_value
             for attr_name, attr_value in self.__dict__.items()

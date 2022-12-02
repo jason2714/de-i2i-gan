@@ -3,7 +3,7 @@ from torch.utils.data import Dataset
 
 
 def find_dataset_using_name(dataset_name):
-    # Given the option --dataset [datasetname],
+    # Given the option --dataset_name [datasetname],
     # the file "datasets/datasetname_dataset.py"
     # will be imported.
     dataset_filename = "datasets." + dataset_name + "_dataset"
