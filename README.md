@@ -73,3 +73,12 @@ LD = gan + a*cls
 LG = gan + b*cls + c*rec + d*sd + e*sdl1  
 (a, b, c, d, e) -> (2, 5, 5, 5, 1)  
 ```
+
+#Dataset
+```angular2html
+CODEBRIM
+
+1590 high-resolution images with defects in context of 30 unique bridges, acquired at different scales and resolutions.
+• 5354 annotated defect bounding boxes (largely with overlapping defects) and 2506 generated non-overlapping background bounding boxes.
+• Defect numbers for the following classes: crack - 2507, spallation - 1898, efflorescence - 833, exposed bars - 1507 and corrosion stain - 1559.
+```

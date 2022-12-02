@@ -17,7 +17,7 @@ class BaseTrainOptions:
 
         # for training
         parser.add_argument('--optimizer', type=str, required=True, help='type of optimizer [sgd|rmsprop|adam|adamw]')
-        parser.add_argument('--num_epochs', type=int, required=True, help='how many epochs for learning')
+        parser.add_argument('--num_epochs', type=int, required=True, help='how many epochs for training')
         parser.add_argument('--lr', type=float, required=True, help='initial learning rate for adam')
         # parser.add_argument('--niter_decay', type=int, default=0,
         #                     help='# of iter to linearly decay learning rate to zero')
