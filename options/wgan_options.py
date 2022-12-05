@@ -32,7 +32,6 @@ class WGanBaseOptions(BaseOptions):
 
         # for model specific arguments
         parser.add_argument('--noise_dim', type=int, default=100, help="dimension of the latent z vector")
-        parser.add_argument('--clipping_limit', type=float, default=0.03, help='clipping limit of W-GAN')
 
         return parser
 
@@ -55,6 +54,7 @@ class TrainOptions(WGanBaseOptions, BaseTrainOptions):
         #                     help='# of iter to linearly decay learning rate to zero')
         parser.add_argument('--num_critics', type=int, default=5,
                             help='number of discriminator iterations per generator iterations.')
+        parser.add_argument('--clipping_limit', type=float, default=0.03, help='clipping limit of W-GAN')
 
         return parser
 

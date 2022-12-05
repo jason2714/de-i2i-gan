@@ -24,7 +24,7 @@ def main():
     train_dataset = dataset_cls(opt, phase='train', transform=train_transform)
     train_loader = DataLoader(train_dataset, batch_size=opt.batch_size, shuffle=True,
                               num_workers=4, worker_init_fn=worker_init_fn)
-    print(f'{len(train_loader)} images in train set')  # Should print 36000
+    print(f'{len(train_loader.dataset)} images in train set')  # Should print 36000
     if opt.phase == 'val':
         val_transform = transforms.Compose([
             transforms.ToTensor(),
@@ -33,7 +33,7 @@ def main():
         val_dataset = dataset_cls(opt, phase='val', transform=val_transform)
         val_loader = DataLoader(val_dataset, batch_size=opt.batch_size, shuffle=False,
                                 num_workers=4, worker_init_fn=worker_init_fn)
-        print(f'{len(val_loader)} images in val set')  # Should print 4000
+        print(f'{len(val_loader.dataset)} images in val set')  # Should print 4000
 
     trainer.train(train_loader, val_loader)
 

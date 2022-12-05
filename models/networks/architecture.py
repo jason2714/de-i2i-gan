@@ -31,8 +31,8 @@ class DeConvBlock(nn.Module):
                  padding_mode='zeros',
                  bias=False,
                  up_scale=True,
-                 norm_layer=nn.InstanceNorm2d,
-                 act_layer='relu',
+                 norm_layer=None,
+                 act_layer=None,
                  use_spectral=False,
                  add_noise=False):
         """
@@ -80,8 +80,8 @@ class ConvBlock(nn.Module):
                  padding=0,
                  padding_mode='zeros',
                  bias=False,
-                 norm_layer=nn.BatchNorm2d,
-                 act_layer='relu',
+                 norm_layer=None,
+                 act_layer=None,
                  use_spectral=False,
                  add_noise=False):
         """

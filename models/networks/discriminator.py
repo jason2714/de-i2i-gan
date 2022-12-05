@@ -16,7 +16,9 @@ class WGanDiscriminator(BaseNetwork):
                            kernel_size=(7, 7),
                            stride=(2, 2),
                            padding=3,
-                           padding_mode='reflect'),
+                           padding_mode='reflect',
+                           norm_layer=nn.BatchNorm2d,
+                           act_layer='relu'),
                  nn.MaxPool2d(kernel_size=(3, 3),
                               stride=(2, 2),
                               padding=1)]
@@ -25,7 +27,9 @@ class WGanDiscriminator(BaseNetwork):
                                    kernel_size=(3, 3),
                                    stride=(2, 2),
                                    padding=1,
-                                   bias=False)]
+                                   bias=False,
+                                   norm_layer=nn.BatchNorm2d,
+                                   act_layer='relu')]
             current_dim *= 2
         backbone += [nn.AdaptiveAvgPool2d(1)]
         classifier += [nn.Linear(current_dim, 1)]

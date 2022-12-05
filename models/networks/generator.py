@@ -12,13 +12,19 @@ class WGanGenerator(BaseNetwork):
         model = [nn.Upsample(scale_factor=2)]  # noise_dim x 2 x 2
 
         current_dim = ngf * (2 ** num_layers)
-        model += [DeConvBlock(noise_dim, current_dim, kernel_size=(4, 4), padding='same')]  # 512 x 4 x 4
+        model += [DeConvBlock(noise_dim, current_dim,
+                              kernel_size=(4, 4),
+                              padding='same',
+                              norm_layer=nn.BatchNorm2d,
+                              act_layer='relu')]  # 512 x 4 x 4
         for i in range(num_layers):
             model += [DeConvBlock(current_dim,
                                   current_dim // 2,
                                   kernel_size=(4, 4),
                                   stride=(1, 1),
-                                  padding='same')]
+                                  padding='same',
+                                  norm_layer=nn.BatchNorm2d,
+                                  act_layer='relu')]
             current_dim //= 2
         model += [nn.Upsample(scale_factor=2),
                   nn.Conv2d(current_dim, 3,

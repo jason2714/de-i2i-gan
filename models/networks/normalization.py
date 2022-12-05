@@ -1,5 +1,4 @@
 from torch import nn
-from .architecture import ConvBlock
 import torch.nn.functional as F
 
 
@@ -11,11 +10,10 @@ class SPADE(nn.Module):
         # The dimension of the intermediate embedding space. Yes, hardcoded.
         nhidden = 128
 
-        self.mlp_shared = ConvBlock(label_nc, nhidden,
-                                    kernel_size=kernel_size,
-                                    padding=padding,
-                                    norm_layer=None,
-                                    act_layer='relu')
+        self.mlp_shared = nn.Sequential(nn.Conv2d(label_nc, nhidden,
+                                                  kernel_size=kernel_size,
+                                                  padding=padding),
+                                        nn.ReLU(inplace=True))
         self.mlp_gamma = nn.Conv2d(nhidden, norm_nc, kernel_size=kernel_size, padding=padding)
         self.mlp_beta = nn.Conv2d(nhidden, norm_nc, kernel_size=kernel_size, padding=padding)
 
