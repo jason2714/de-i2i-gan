@@ -17,7 +17,16 @@ class DefectGanTrainer(BaseTrainer):
     def __init__(self, opt):
         super().__init__(opt)
 
-
+    # def _cal_dis_grad(self, real_data, fake_data):
+    #     alpha = torch.rand(real_data.shape[0], 1, 1, 1).expand_as(real_data).to(real_data.device)
+    #     max_data = Variable(alpha * real_data + (1 - alpha) * fake_data, requires_grad=True)
+    #     mix_logits = self.model.netD(max_data)
+    #     mix_grad = grad(mix_logits, max_data, grad_outputs=torch.ones_like(mix_logits))[0]
+    #     # mix_logits.backward(torch.ones_like(mix_logits))
+    #     # mix_grad = max_data.grad
+    #     return mix_grad.max()
+    #     # return mean(fake_grad)
+    #
     # @torch.no_grad()
     # def _generate_image(self):
     #     # print(f'inside generate_image')
@@ -53,7 +62,6 @@ class DefectGanTrainer(BaseTrainer):
     #     writer = SummaryWriter(self.opt.log_dir / self.opt.name)
     #     for epoch in range(1, self.opt.num_epochs + 1):
     #         self.losses.clear()
-    #         self.dis_outputs.clear()
     #         self._train_epoch(train_loader, epoch)
     #         if val_loader is not None:
     #             self._val_epoch(val_loader)
@@ -66,15 +74,15 @@ class DefectGanTrainer(BaseTrainer):
     #     pbar = tqdm(data_loader, colour='MAGENTA')
     #     # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
     #     for batch_data in pbar:
-    #         self.steps += 1
+    #         self.iters += 1
     #         pbar.set_description(f'Epoch: [{epoch}/{self.opt.num_epochs}], '
-    #                              f'Step: [{self.steps}]')
+    #                              f'Iter: [{self.iters}]')
     #         # print(batch_data.min(), batch_data.max())
     #         batch_data = batch_data.to(self.opt.device)
     #         self._train_discriminator_once(batch_data)
-    #         if self.steps % self.opt.num_critics == 0:
+    #         if self.iters % self.opt.num_critics == 0:
     #             self._train_generator_once(batch_data.shape[0])
-    #         if self.steps % self.opt.save_latest_freq == 0:
+    #         if self.iters % self.opt.save_latest_freq == 0:
     #             self.model.save('latest')
     #         pbar.set_postfix(w_dis=f'{-sum(self.losses["gan_D"]) / len(self.losses["gan_D"]):.4f}',
     #                          g_loss=f'{sum(self.losses["gan_G"]) / (len(self.losses["gan_G"]) + 1e-12):.4f}')

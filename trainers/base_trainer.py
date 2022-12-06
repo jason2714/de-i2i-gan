@@ -1,3 +1,4 @@
+import math
 from collections import defaultdict
 
 import torch
@@ -13,13 +14,16 @@ class BaseTrainer:
     and the latest visuals to visualize the progress in training.
     """
 
-    def __init__(self, opt):
+    def __init__(self, opt, dataset_size):
         self.opt = opt
         self.model = find_model_using_name(opt.model)(opt)
         self.model.init_weights()
         self._create_optimizer(opt)
         self.losses = defaultdict(list)
-        self.steps = 0
+        self.dis_outputs = defaultdict(list)
+        self.iters = 0
+        if self.opt.num_epochs == -1:
+            self.opt.num_epochs = math.ceil(self.opt.num_iters / (dataset_size + 1e-12))
 
     def _create_optimizer(self, opt):
         assert isinstance(self.opt.lr, (int, float, dict)), 'type of lr should be scalar or dict'

@@ -6,14 +6,13 @@ from utils.util import worker_init_fn
 from torchvision import transforms
 from utils.util import fix_rand_seed
 from trainers import find_trainer_using_model_name
-
+import math
 
 def main():
     fix_rand_seed()
     # wgan_options
     opt = TrainOptions().parse()
 
-    trainer = find_trainer_using_model_name(opt.model)(opt)
     dataset_cls = find_dataset_using_name(opt.dataset_name)
     val_loader = None
     train_transform = transforms.Compose([
@@ -35,6 +34,7 @@ def main():
                                 num_workers=4, worker_init_fn=worker_init_fn)
         print(f'{len(val_loader.dataset)} images in val set')  # Should print 4000
 
+    trainer = find_trainer_using_model_name(opt.model)(opt, len(train_loader))
     trainer.train(train_loader, val_loader)
 
 

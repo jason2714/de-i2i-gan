@@ -17,12 +17,11 @@ from trainers.base_trainer import BaseTrainer
 
 class WGanTrainer(BaseTrainer):
     """
-    BaseTrainer receives the options and initialize optimizers, models, losses, step
+    BaseTrainer receives the options and initialize optimizers, models, losses, iters, D(x), num_epochs
     """
 
-    def __init__(self, opt):
-        super().__init__(opt)
-        self.dis_outputs = defaultdict(list)
+    def __init__(self, opt, dataset_size=math.inf):
+        super().__init__(opt, dataset_size)
         self.fix_noise = torch.rand(opt.num_display_images, opt.noise_dim, 1, 1)
         if opt.use_default_name:
             self.opt.name += f'_{self.model.clipping_limit}'
@@ -87,15 +86,15 @@ class WGanTrainer(BaseTrainer):
         pbar = tqdm(data_loader, colour='MAGENTA')
         # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
         for batch_data in pbar:
-            self.steps += 1
+            self.iters += 1
             pbar.set_description(f'Epoch: [{epoch}/{self.opt.num_epochs}], '
-                                 f'Step: [{self.steps}]')
+                                 f'Iter: [{self.iters}]')
             # print(batch_data.min(), batch_data.max())
             batch_data = batch_data.to(self.opt.device)
             self._train_discriminator_once(batch_data)
-            if self.steps % self.opt.num_critics == 0:
+            if self.iters % self.opt.num_critics == 0:
                 self._train_generator_once(batch_data.shape[0])
-            if self.steps % self.opt.save_latest_freq == 0:
+            if self.iters % self.opt.save_latest_freq == 0:
                 self.model.save('latest')
             pbar.set_postfix(w_dis=f'{-sum(self.losses["gan_D"]) / len(self.losses["gan_D"]):.4f}',
                              g_loss=f'{sum(self.losses["gan_G"]) / (len(self.losses["gan_G"]) + 1e-12):.4f}')

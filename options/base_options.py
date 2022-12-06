@@ -8,6 +8,7 @@ import pickle
 class BaseOptions:
     def __init__(self):
         self.initialized = False
+        self.is_train = False
 
     def initialize(self, parser):
         # experiment specifics
@@ -70,7 +71,7 @@ class BaseOptions:
         # # modify model-related parser options
         # model_name = opt.model
         # model_option_setter = models.get_option_setter(model_name)
-        # parser = model_option_setter(parser, self.isTrain)
+        # parser = model_option_setter(parser, self.is_train)
         #
         # opt, unknown = parser.parse_known_args()
 
@@ -130,11 +131,14 @@ class BaseOptions:
     def parse(self, save=False):
 
         opt = self.gather_options()
-        opt.isTrain = self.isTrain   # train or test
+        opt.is_train = self.is_train  # train or test
 
         self.print_options(opt)
-        if opt.isTrain:
+        if opt.is_train:
             self.save_options(opt)
+            # initial num_epochs
+            assert opt.num_epochs != -1 or opt.num_iters == -1, \
+                'Not define nums_epochs or num_iters in TrainOptions'
 
         # set gpu ids
         opt.device = use_gpu(opt.gpu_ids)

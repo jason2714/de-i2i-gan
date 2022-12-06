@@ -4,7 +4,7 @@ from pathlib import Path
 
 class BaseTrainOptions:
     def __init__(self):
-        self.isTrain = True
+        self.is_train = True
 
     def initialize(self, parser):
         # for displays
@@ -13,12 +13,15 @@ class BaseTrainOptions:
         parser.add_argument('--save_epoch_freq', type=int, default=10,
                             help='frequency of saving checkpoints at the end of epochs')
         parser.add_argument('--save_latest_freq', type=int, default=1000,
-                            help='frequency of saving latest checkpoints at the end of steps')
+                            help='frequency of saving latest checkpoints at the end of iters')
 
         # for training
         parser.add_argument('--optimizer', type=str, required=True, help='type of optimizer [sgd|rmsprop|adam|adamw]')
-        parser.add_argument('--num_epochs', type=int, required=True, help='how many epochs for training')
-        parser.add_argument('--lr', type=float, required=True, help='initial learning rate for adam')
+        parser.add_argument('--num_epochs', type=int, default=-1, help='how many epochs for training')
+        parser.add_argument('--num_iters', type=int, default=-1, help='how many iters for training, '
+                                                                      'ignored when num_epochs defined!!')
+        parser.add_argument('--lr', type=float, required=True, help='initial learning rate for optimizer')
+        parser.add_argument('--lr_decay', type=float, default=1, help='learning rate decay for optimizer')
         # parser.add_argument('--niter_decay', type=int, default=0,
         #                     help='# of iter to linearly decay learning rate to zero')
         parser.add_argument('--num_critics', type=int, default=1,
@@ -33,3 +36,8 @@ class BaseTrainOptions:
 
         return parser
 
+    def init_num_iters(self):
+        """
+            transform num_iters from num_epochs
+        """
+        pass
