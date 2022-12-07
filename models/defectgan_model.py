@@ -10,14 +10,14 @@ class DefectGanModel(BaseModel):
         super().__init__(opt)
         image_size = opt.image_size
         assert image_size & (image_size - 1) == 0, 'Image size must be a power of 2'
-        self.netG = DefectGanGenerator(opt.label_nc,
+        self.netG = DefectGanGenerator(label_nc=opt.label_nc,
                                        input_nc=opt.input_nc,
                                        num_scales=opt.num_scales,
-                                       num_res=opt.nun_res,
+                                       num_res=opt.num_res,
                                        ngf=opt.ngf,
                                        use_spectral=opt.use_spectral,
                                        add_noise=opt.add_noise).to(opt.device)
-        self.netD = DefectGanDiscriminator(opt.label_nc,
+        self.netD = DefectGanDiscriminator(label_nc=opt.label_nc,
                                            image_size=opt.image_size,
                                            input_nc=opt.input_nc,
                                            num_layers=opt.num_layers,

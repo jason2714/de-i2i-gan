@@ -21,14 +21,19 @@ class DefectGanBaseOptions(BaseOptions):
         parser.add_argument('--dataset_name', type=str, default='codebrim', help='which dataset to use')
         parser.add_argument('--batch_size', type=int, default=4, help='input batch size')
         parser.add_argument('--image_size', type=int, default=128, help='input image size')
+        parser.add_argument('--label_nc', type=int, default=6, help='# of label classes')
 
         # for generator
         # parser.add_argument('--netG', type=str, default='defectgan', help='selects model to use for netG (wgan)')
         parser.add_argument('--ngf', type=int, default=64, help='# of gen filters in last conv layer')
+        parser.add_argument('--num_scales', type=int, default=2, help='# of gen scale layers')
+        parser.add_argument('--num_res', type=int, default=6, help='# of gen resnet layers')
+        parser.add_argument('--add_noise', action='store_true', help='whether to add noise in generator')
 
         # for discriminator
         # parser.add_argument('--netD', type=str, default='defectgan', help='selects model to use for netD (wgan)')
         parser.add_argument('--ndf', type=int, default=64, help='# of dis filters in first conv layer')
+        parser.add_argument('--num_layers', type=int, default=5, help='# of dis encode layers')
 
         return parser
 

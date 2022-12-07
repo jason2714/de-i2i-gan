@@ -27,7 +27,7 @@ class BaseOptions:
         parser.add_argument('--output_nc', type=int, default=3, help='# of output image channels')
 
         # for setting inputs
-        parser.add_argument('--data_dir', type=Path, default='./data/')
+        parser.add_argument('--data_dir', type=Path, default='./data')
         parser.add_argument('--dataset_name', type=str, required=True, help='which dataset to use')
         parser.add_argument('--load_from_opt_file', action='store_true',
                             help='load the options from checkpoints and use that as default')
@@ -37,6 +37,7 @@ class BaseOptions:
                             help='network initialization [normal|xavier|kaiming|orthogonal]')
         parser.add_argument('--init_variance', type=float, default=0.02,
                             help='variance of the initialization distribution')
+        parser.add_argument('--use_spectral', action='store_true', help='whether to use spectral norm in conv block')
 
         # for generator
         # parser.add_argument('--netG', type=str, default='defectgan', help='selects model to use for netG (wgan)')

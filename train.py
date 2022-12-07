@@ -8,6 +8,7 @@ from utils.util import fix_rand_seed
 from trainers import find_trainer_using_model_name
 import math
 
+
 def main():
     fix_rand_seed()
     # wgan_options
