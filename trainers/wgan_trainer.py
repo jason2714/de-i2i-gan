@@ -100,6 +100,8 @@ class WGanTrainer(BaseTrainer):
                              g_loss=f'{sum(self.losses["gan_G"]) / (len(self.losses["gan_G"]) + 1e-12):.4f}')
             # ,
             # dis_grad=f'{max(self.losses["dis_grad"]):.4f}')
+        for model_name in self.schedulers.keys():
+            self.schedulers[model_name].step()
 
     @torch.no_grad()
     def _val_epoch(self, data_loader):
