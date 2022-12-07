@@ -14,8 +14,8 @@ from trainers.base_trainer import BaseTrainer
 
 
 class DefectGanTrainer(BaseTrainer):
-    def __init__(self, opt, dataset_size=math.inf):
-        super().__init__(opt, dataset_size)
+    def __init__(self, opt, iters_per_epoch=math.inf):
+        super().__init__(opt, iters_per_epoch)
 
     # def _cal_dis_grad(self, real_data, fake_data):
     #     alpha = torch.rand(real_data.shape[0], 1, 1, 1).expand_as(real_data).to(real_data.device)

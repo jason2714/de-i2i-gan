@@ -20,8 +20,8 @@ class WGanTrainer(BaseTrainer):
     BaseTrainer receives the options and initialize optimizers, models, losses, iters, D(x), num_epochs
     """
 
-    def __init__(self, opt, dataset_size=math.inf):
-        super().__init__(opt, dataset_size)
+    def __init__(self, opt, iters_per_epoch=math.inf):
+        super().__init__(opt, iters_per_epoch)
         self.fix_noise = torch.rand(opt.num_display_images, opt.noise_dim, 1, 1)
         if opt.use_default_name:
             self.opt.name += f'_{self.model.clipping_limit}'
@@ -88,7 +88,7 @@ class WGanTrainer(BaseTrainer):
         for batch_data in pbar:
             self.iters += 1
             pbar.set_description(f'Epoch: [{epoch}/{self.opt.num_epochs}], '
-                                 f'Iter: [{self.iters}]')
+                                 f'Iter: [{self.iters}/{self.opt.num_iters}]')
             # print(batch_data.min(), batch_data.max())
             batch_data = batch_data.to(self.opt.device)
             self._train_discriminator_once(batch_data)

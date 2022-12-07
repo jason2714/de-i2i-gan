@@ -14,7 +14,7 @@ class BaseTrainer:
     and the latest visuals to visualize the progress in training.
     """
 
-    def __init__(self, opt, dataset_size):
+    def __init__(self, opt, iters_per_epoch):
         self.opt = opt
         self.model = find_model_using_name(opt.model)(opt)
         self.model.init_weights()
@@ -23,7 +23,9 @@ class BaseTrainer:
         self.dis_outputs = defaultdict(list)
         self.iters = 0
         if self.opt.num_epochs == -1:
-            self.opt.num_epochs = math.ceil(self.opt.num_iters / (dataset_size + 1e-12))
+            self.opt.num_epochs = math.ceil(self.opt.num_iters / (iters_per_epoch + 1e-12))
+        elif self.opt.num_iters == -1:
+            self.opt.num_iters = self.opt.num_epochs * iters_per_epoch
 
     def _create_optimizer(self, opt):
         assert isinstance(self.opt.lr, (int, float, dict)), 'type of lr should be scalar or dict'
