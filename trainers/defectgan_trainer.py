@@ -17,27 +17,27 @@ class DefectGanTrainer(BaseTrainer):
     def __init__(self, opt, iters_per_epoch=math.inf):
         super().__init__(opt, iters_per_epoch)
 
-    def _cal_dis_grad(self, real_data, fake_data):
-        alpha = torch.rand(real_data.shape[0], 1, 1, 1).expand_as(real_data).to(real_data.device)
-        max_data = Variable(alpha * real_data + (1 - alpha) * fake_data, requires_grad=True)
-        mix_logits = self.model.netD(max_data)
-        mix_grad = grad(mix_logits, max_data, grad_outputs=torch.ones_like(mix_logits))[0]
-        # mix_logits.backward(torch.ones_like(mix_logits))
-        # mix_grad = max_data.grad
-        return mix_grad.max()
-        # return mean(fake_grad)
-
-    @torch.no_grad()
-    def _generate_image(self):
-        # print(f'inside generate_image')
-        # print(f'fix noise required grad = {self.fix_noise.requires_grad}')
-        fake_data = self.model.netG(self.fix_noise)
-        # print(f'fake_data required grad = {fake_data.requires_grad}')
-        # print(fake_data.min(), fake_data.max())
-        fake_data = (fake_data / 2 + 0.5).detach().cpu()
-        # print(fake_data.min(), fake_data.max())
-        # exit()
-        return fake_data
+    # def _cal_dis_grad(self, real_data, fake_data):
+    #     alpha = torch.rand(real_data.shape[0], 1, 1, 1).expand_as(real_data).to(real_data.device)
+    #     max_data = Variable(alpha * real_data + (1 - alpha) * fake_data, requires_grad=True)
+    #     mix_logits = self.model.netD(max_data)
+    #     mix_grad = grad(mix_logits, max_data, grad_outputs=torch.ones_like(mix_logits))[0]
+    #     # mix_logits.backward(torch.ones_like(mix_logits))
+    #     # mix_grad = max_data.grad
+    #     return mix_grad.max()
+    #     # return mean(fake_grad)
+    #
+    # @torch.no_grad()
+    # def _generate_image(self):
+    #     # print(f'inside generate_image')
+    #     # print(f'fix noise required grad = {self.fix_noise.requires_grad}')
+    #     fake_data = self.model.netG(self.fix_noise)
+    #     # print(f'fake_data required grad = {fake_data.requires_grad}')
+    #     # print(fake_data.min(), fake_data.max())
+    #     fake_data = (fake_data / 2 + 0.5).detach().cpu()
+    #     # print(fake_data.min(), fake_data.max())
+    #     # exit()
+    #     return fake_data
 
     def _write_tf_log(self, writer, epoch):
         # for losses
@@ -49,11 +49,10 @@ class DefectGanTrainer(BaseTrainer):
                                      for key, value in self.dis_outputs.items()
                                      }, epoch)
         # for generated image
-        generated_images = self._generate_image()
-        # print(generated_images.shape)
-        nrow = int(math.sqrt(self.opt.num_display_images))
-        image_grid = make_grid(generated_images, nrow=nrow)
-        writer.add_image('Generated Image', image_grid, epoch)
+        # generated_images = self._generate_image()
+        # nrow = int(math.sqrt(self.opt.num_display_images))
+        # image_grid = make_grid(generated_images, nrow=nrow)
+        # writer.add_image('Generated Image', image_grid, epoch)
 
     def train(self, train_loader, val_loader=None):
         """
@@ -73,15 +72,17 @@ class DefectGanTrainer(BaseTrainer):
     def _train_epoch(self, data_loader, epoch):
         pbar = tqdm(data_loader, colour='MAGENTA')
         # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
-        for batch_data in pbar:
+        for batch_data, labels in pbar:
             self.iters += 1
             pbar.set_description(f'Epoch: [{epoch}/{self.opt.num_epochs}], '
                                  f'Iter: [{self.iters}/{self.opt.num_iters}]')
             # print(batch_data.min(), batch_data.max())
+            # TODO modify input data label
             batch_data = batch_data.to(self.opt.device)
-            self._train_discriminator_once(batch_data)
+            labels = labels.to(self.opt.device)
+            self._train_discriminator_once(batch_data, labels)
             if self.iters % self.opt.num_critics == 0:
-                self._train_generator_once(batch_data.shape[0])
+                self._train_generator_once(batch_data, labels)
             if self.iters % self.opt.save_latest_freq == 0:
                 self.model.save('latest')
             pbar.set_postfix(w_dis=f'{-sum(self.losses["gan_D"]) / len(self.losses["gan_D"]):.4f}',
