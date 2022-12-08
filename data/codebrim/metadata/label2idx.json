@@ -1,8 +1,8 @@
 {
   "Background": 0,
-  "Crack": 1,
-  "Spallation": 2,
+  "CorrosionStain": 1,
+  "Crack": 2,
   "Efflorescence": 3,
   "ExposedBars": 4,
-  "CorrosionStain": 5
+  "Spallation": 5
 }
