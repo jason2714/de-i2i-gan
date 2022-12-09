@@ -1,5 +1,6 @@
 import json
 
+import torch
 from torch.utils.data import Dataset
 from PIL import Image
 
@@ -26,7 +27,7 @@ class CodeBrimDataset(Dataset):
 
         # initialize data with format list of (filename, label)
         data_dir = opt.data_dir / opt.dataset_name / phase / data_type
-        self.data = [(filename, fn_label_map[filename])
+        self.data = [(filename, fn_label_map[filename.name])
                      for filename in data_dir.iterdir() if filename.suffix == '.png']
         self.data.sort()
         self.len = len(self.data)
@@ -36,7 +37,7 @@ class CodeBrimDataset(Dataset):
         image = Image.open(image_fn)
         if self.transform is not None:
             image = self.transform(image)
-        return image, label
+        return image, torch.LongTensor(label), str(image_fn)
 
     def __len__(self):
         return self.len

@@ -64,11 +64,15 @@ class BaseOptions:
 
         # check if experiment name is set
         if opt.name == parser.get_default('name'):
-            name = f'{opt.model}_{opt.num_critics}_{opt.lr}'
+            name_idx = 0
+            name = f'{opt.name}{name_idx}'
+            ckpt_dir = opt.ckpt_dir / name
+            while ckpt_dir.exists():
+                name_idx += 1
+                name = f'{opt.name}{name_idx}'
+                ckpt_dir = opt.ckpt_dir / name
             parser.set_defaults(name=name)
-            parser.set_defaults(use_default_name=True)
-        else:
-            parser.set_defaults(use_default_name=False)
+
         # # modify model-related parser options
         # model_name = opt.model
         # model_option_setter = models.get_option_setter(model_name)
@@ -138,7 +142,7 @@ class BaseOptions:
         if opt.is_train:
             self.save_options(opt)
             # initial num_epochs
-            assert opt.num_epochs != -1 or opt.num_iters == -1, \
+            assert opt.num_epochs != -1 or opt.num_iters != -1, \
                 'Not define nums_epochs or num_iters in TrainOptions'
 
         # set gpu ids

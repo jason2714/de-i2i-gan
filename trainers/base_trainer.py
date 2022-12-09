@@ -4,7 +4,7 @@ from collections import defaultdict
 import torch
 from torch import optim
 
-from models import find_model_using_name
+from models import create_model
 
 
 class BaseTrainer:
@@ -16,7 +16,7 @@ class BaseTrainer:
 
     def __init__(self, opt, iters_per_epoch):
         self.opt = opt
-        self.model = find_model_using_name(opt.model)(opt)
+        self.model = create_model(opt)
         self.model.init_weights()
         self.losses = defaultdict(list)
         self.dis_outputs = defaultdict(list)

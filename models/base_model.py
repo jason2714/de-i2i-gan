@@ -35,6 +35,7 @@ class BaseModel:
         return networks
 
     def init_weights(self):
+        print(f"initialize model's parameters using {self.opt.init_type} with variance={self.opt.init_variance}")
         for network in self.networks.values():
             network.init_weights(self.opt.init_type, self.opt.init_variance)
 
