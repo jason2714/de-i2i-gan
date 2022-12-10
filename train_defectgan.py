@@ -51,7 +51,7 @@ def view_data_after_transform(opt, loaders):
 
 
 def main():
-    # fix_rand_seed()
+    fix_rand_seed()
     # defectgan_options
     opt = TrainOptions().parse()
 
@@ -96,7 +96,7 @@ def main():
         }
         for data_type in DATATYPE:
             print(f'{len(val_loaders[data_type].dataset)} images in train {data_type} set')
-    view_data_after_transform(opt, train_loaders)
+    # view_data_after_transform(opt, train_loaders)
     # trainer = find_trainer_using_model_name(opt.model)(opt,
     #                                                    max(len(train_loaders[data_type]) for data_type in DATATYPE))
     # trainer.train(train_loaders, val_loaders)

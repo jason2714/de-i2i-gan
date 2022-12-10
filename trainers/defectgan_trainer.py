@@ -108,6 +108,30 @@ class DefectGanTrainer(BaseTrainer):
 
     def _train_generator_once(self, df_data, df_labels, bg_data, bg_labels):
         self.optimizers['G'].zero_grad()
+
+        # generator
+        # normal -> defect -> normal
+        df_prob, df_fg = self.model.netG(bg_data, df_labels)
+        fake_defects = bg_data * (1 - df_prob) + df_fg * df_prob
+        re_df_prob, re_df_fg = self.model.netG(fake_defects, -df_labels)
+        recover_normals = fake_defects * (1 - re_df_prob) + re_df_fg * re_df_prob
+
+        # defect -> normal -> defect
+        nm_prob, nm_fg = self.model.netG(df_data, -df_labels)
+        fake_normals = df_data * (1 - nm_prob) + nm_fg * nm_prob
+        re_nm_prob, re_nm_fg = self.model.netG(fake_normals, df_labels)
+        recover_defects = fake_normals * (1 - re_nm_prob) + re_nm_fg * re_nm_prob
+
+        # discriminator
+        fake_defects_logits = self.model.netD(fake_defects)
+        fake_normals_logits = self.model.netD(fake_normals)
+        recover_defects_logits = self.model.netD(recover_defects)
+        recover_normals_logits = self.model.netD(recover_normals)
+        real_defects_logits = self.model.netD(df_data)
+        real_normals_logits = self.model.netD(bg_data)
+
+        # TODO calculate generator loss
+
         fake_data = self.model.netG(batch_size)
         fake_logits = self.model.netD(fake_data)
         g_loss = -fake_logits.mean()
@@ -117,19 +141,23 @@ class DefectGanTrainer(BaseTrainer):
 
     def _train_discriminator_once(self, df_data, df_labels, bg_data, bg_labels):
         self.optimizers['D'].zero_grad()
-        # expand labels' shape to the same as data
-        df_labels = df_labels.expand_as(bg_data)
-        bg_labels = bg_labels.expand_as(df_data)
-        # normal -> defect -> normal
-        fake_defects = self.model.netG(bg_data, df_labels)
-        recover_normals = self.model.netG(fake_defects, -df_labels)
-        # defect -> normal -> defect
-        fake_normals = self.model.netG(df_data, bg_labels)
-        recover_defects = self.model.netG(fake_normals, -bg_labels)
 
+        # generator
+        # normal -> defect
+        df_prob, df_fg = self.model.netG(bg_data, df_labels)
+        fake_defects = bg_data * (1 - df_prob) + df_fg * df_prob
+        # defect -> normal
+        nm_prob, nm_fg = self.model.netG(df_data, -df_labels)
+        fake_normals = df_data * (1 - nm_prob) + nm_fg * nm_prob
 
-        fake_logits = self.model.netD(fake_data)
-        real_logits = self.model.netD(real_data)
+        # discriminator
+        fake_defects_logits = self.model.netD(fake_defects.detach_())
+        fake_normals_logits = self.model.netD(fake_normals.detach_())
+        real_defects_logits = self.model.netD(df_data)
+        real_normals_logits = self.model.netD(bg_data)
+
+        # TODO calculate patchGAN loss
+
         w_distance = real_logits.mean() - fake_logits.mean()
         d_loss = -w_distance
         # self.losses['dis_grad'].append(self._cal_dis_grad(real_data, fake_data))

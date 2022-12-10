@@ -164,14 +164,15 @@ class DefectGanGenerator(BaseNetwork):
         self.enc_blk = nn.Sequential(*conv_blk, *enc_res_blk)
         self.dec_blk = nn.Sequential(*dec_res_blk, *de_conv_blk)
 
-    def forward(self, x, label):
+    def forward(self, x, labels):
         assert isinstance(x, torch.Tensor), "x must be Original Images: Torch.Tensor"
-        x, label = x.to(self.device), label.to(self.device)
+        # expand labels' shape to the same as data
+        x, labels = x.to(self.device), labels.expand_as(x).to(self.device)
         x = self.stem(x)
         for enc_blk in self.enc_blk:
             x = enc_blk(x)
         for dec_blk in self.dec_blk:
-            x = dec_blk(x, label)
+            x = dec_blk(x, labels)
         foreground = self.foreground_head(x)
         spatial_distribution = self.distribution_head(x)
         return spatial_distribution, foreground
