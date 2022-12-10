@@ -1,6 +1,8 @@
 from torch.utils.data import DataLoader
 
 from datasets import find_dataset_using_name
+from loaders.infinite_loader import InfiniteDataLoader
+from datasets.concat_dataset import ConcatDataset
 from options.defectgan_options import TrainOptions
 from utils.util import worker_init_fn
 from torchvision import transforms
@@ -9,19 +11,41 @@ from trainers import find_trainer_using_model_name
 import math
 
 DATATYPE = ["defects", "background"]
+LOADER_CLS = {"defects": DataLoader,
+              "background": InfiniteDataLoader}
 
 
-def save_data_after_transform(opt, loaders):
+def view_data_after_transform(opt, loaders):
+    import numpy as np
+    import imageio
+    from pathlib import Path
     for data_type in DATATYPE:
-        images, labels, file_paths = next(iter(loaders[data_type]))
-        import numpy as np
-        import imageio
-        from pathlib import Path
+        if data_type == 'defects':
+            iterator = iter(loaders[data_type])
+        else:
+            iterator = loaders[data_type]
+        images, labels, file_paths = next(iterator)
         for i, (image, file_path) in enumerate(zip(images, file_paths)):
             file_path = Path(file_path)
             image_out = image.permute(1, 2, 0).numpy()
             image_out = np.uint8((image_out + 1) * 127.5)
-            imageio.imsave(opt.ckpt_dir / opt.name / f'{file_path.stem}_new.png', image_out)
+            imageio.imsave(opt.ckpt_dir / opt.name / f'{file_path.stem}_new_0.png', image_out)
+            import shutil
+            shutil.copyfile(file_path, opt.ckpt_dir / opt.name / file_path.name)
+        images, labels, file_paths = next(iterator)
+        for i, (image, file_path) in enumerate(zip(images, file_paths)):
+            file_path = Path(file_path)
+            image_out = image.permute(1, 2, 0).numpy()
+            image_out = np.uint8((image_out + 1) * 127.5)
+            imageio.imsave(opt.ckpt_dir / opt.name / f'{file_path.stem}_new_1.png', image_out)
+            import shutil
+            shutil.copyfile(file_path, opt.ckpt_dir / opt.name / file_path.name)
+        images, labels, file_paths = next(iterator)
+        for i, (image, file_path) in enumerate(zip(images, file_paths)):
+            file_path = Path(file_path)
+            image_out = image.permute(1, 2, 0).numpy()
+            image_out = np.uint8((image_out + 1) * 127.5)
+            imageio.imsave(opt.ckpt_dir / opt.name / f'{file_path.stem}_new_2.png', image_out)
             import shutil
             shutil.copyfile(file_path, opt.ckpt_dir / opt.name / file_path.name)
 
@@ -38,18 +62,17 @@ def main():
         transforms.RandomResizedCrop((opt.image_size, opt.image_size), scale=(0.6, 1.0)),
         transforms.RandomHorizontalFlip(0.5),
         transforms.RandomVerticalFlip(0.5),
-        # TODO WARNING!!!! check if colorjitter is ok for defectGAN
         transforms.ColorJitter(brightness=0.2, saturation=0.2, contrast=0.2),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     ])
     train_datasets = {
         data_type: dataset_cls(opt, phase='train', data_type=data_type, transform=train_transform)
         for data_type in DATATYPE
     }
     train_loaders = {
-        data_type: DataLoader(train_dataset, batch_size=opt.batch_size, shuffle=True,
-                              num_workers=4, worker_init_fn=worker_init_fn)
+        data_type: LOADER_CLS[data_type](train_dataset, batch_size=opt.batch_size, shuffle=True,
+                                         num_workers=1, worker_init_fn=worker_init_fn)
         for data_type, train_dataset in train_datasets.items()
     }
     for data_type in DATATYPE:
@@ -73,7 +96,7 @@ def main():
         }
         for data_type in DATATYPE:
             print(f'{len(val_loaders[data_type].dataset)} images in train {data_type} set')
-    # save_data_after_transform(opt, train_loaders)
+    view_data_after_transform(opt, train_loaders)
     # trainer = find_trainer_using_model_name(opt.model)(opt,
     #                                                    max(len(train_loaders[data_type]) for data_type in DATATYPE))
     # trainer.train(train_loaders, val_loaders)

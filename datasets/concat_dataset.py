@@ -6,9 +6,7 @@ class ConcatDataset(Dataset):
         self.datasets = datasets
 
     def __getitem__(self, i):
-        for dataset in self.datasets:
-            print(len(dataset))
         return tuple(d[i] for d in self.datasets)
 
     def __len__(self):
-        return max(len(d) for d in self.datasets)
+        return min(len(d) for d in self.datasets)

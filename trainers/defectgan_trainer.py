@@ -54,35 +54,39 @@ class DefectGanTrainer(BaseTrainer):
         # image_grid = make_grid(generated_images, nrow=nrow)
         # writer.add_image('Generated Image', image_grid, epoch)
 
-    def train(self, train_loader, val_loader=None):
+    def train(self, train_loaders, val_loaders=None):
         """
         epoch start with 1, end with num_epochs
         """
         writer = SummaryWriter(self.opt.log_dir / self.opt.name)
         for epoch in range(1, self.opt.num_epochs + 1):
             self.losses.clear()
-            self._train_epoch(train_loader, epoch)
+            self._train_epoch(train_loaders, epoch)
             # if val_loader is not None:
-            #     self._val_epoch(val_loader)
+            #     self._val_epoch(val_loaders)
             self._write_tf_log(writer, epoch)
             if epoch % self.opt.save_epoch_freq == 0:
                 self.model.save(epoch)
         writer.close()
 
-    def _train_epoch(self, data_loader, epoch):
-        pbar = tqdm(data_loader, colour='MAGENTA')
+    def _train_epoch(self, data_loaders, epoch):
+        pbar = tqdm(data_loaders['defects'], colour='MAGENTA')
         # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
-        for batch_data, labels in pbar:
+        for df_data, df_labels, _ in pbar:
             self.iters += 1
             pbar.set_description(f'Epoch: [{epoch}/{self.opt.num_epochs}], '
                                  f'Iter: [{self.iters}/{self.opt.num_iters}]')
-            # print(batch_data.min(), batch_data.max())
-            # TODO modify input data label
-            batch_data = batch_data.to(self.opt.device)
-            labels = labels.to(self.opt.device)
-            self._train_discriminator_once(batch_data, labels)
+
+            # get bg data and truncate them to the same as batch_size of defect data
+            bg_data, bg_labels, _ = next(data_loaders['background'])
+            bg_data, bg_labels = bg_data[:df_data.size(0)], bg_labels[:df_data.size(0)]
+            # # move to device
+            # df_data, df_labels = df_data.to(self.opt.device), df_labels.to(self.opt.device)
+            # bg_data, bg_labels = bg_data.to(self.opt.device), bg_labels.to(self.opt.device)
+
+            self._train_discriminator_once(df_data, df_labels, bg_data, bg_labels)
             if self.iters % self.opt.num_critics == 0:
-                self._train_generator_once(batch_data, labels)
+                self._train_generator_once(df_data, df_labels, bg_data, bg_labels)
             if self.iters % self.opt.save_latest_freq == 0:
                 self.model.save('latest')
             pbar.set_postfix(w_dis=f'{-sum(self.losses["gan_D"]) / len(self.losses["gan_D"]):.4f}',
@@ -96,13 +100,13 @@ class DefectGanTrainer(BaseTrainer):
     # def _val_epoch(self, data_loader):
     #     pbar = tqdm(data_loader, colour='MAGENTA')
     #     # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
-    #     for batch_data in pbar:
+    #     for batch_data, labels, _ in pbar:
     #         pbar.set_description('Validating... ')
     #         batch_data = batch_data.to(self.opt.device)
     #         val_logits = self.model.netD(batch_data)
     #         self.dis_outputs['val'] += val_logits.flatten().tolist()
 
-    def _train_generator_once(self, batch_size):
+    def _train_generator_once(self, df_data, df_labels, bg_data, bg_labels):
         self.optimizers['G'].zero_grad()
         fake_data = self.model.netG(batch_size)
         fake_logits = self.model.netD(fake_data)
@@ -111,10 +115,19 @@ class DefectGanTrainer(BaseTrainer):
         self.optimizers['G'].step()
         self.losses['gan_G'].append(g_loss.item())
 
-    def _train_discriminator_once(self, real_data):
-        self.model.weight_clipping()
+    def _train_discriminator_once(self, df_data, df_labels, bg_data, bg_labels):
         self.optimizers['D'].zero_grad()
-        fake_data = self.model.netG(real_data.shape[0])
+        # expand labels' shape to the same as data
+        df_labels = df_labels.expand_as(bg_data)
+        bg_labels = bg_labels.expand_as(df_data)
+        # normal -> defect -> normal
+        fake_defects = self.model.netG(bg_data, df_labels)
+        recover_normals = self.model.netG(fake_defects, -df_labels)
+        # defect -> normal -> defect
+        fake_normals = self.model.netG(df_data, bg_labels)
+        recover_defects = self.model.netG(fake_normals, -bg_labels)
+
+
         fake_logits = self.model.netD(fake_data)
         real_logits = self.model.netD(real_data)
         w_distance = real_logits.mean() - fake_logits.mean()

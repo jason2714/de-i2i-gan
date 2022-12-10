@@ -1,0 +1,36 @@
+                add_noise: False                         
+               batch_size: 4                             
+                 ckpt_dir: ckpt                          	[default: ./ckpt]
+        continue_training: False                         
+                 data_dir: data                          	[default: ./data]
+             dataset_name: codebrim                      
+                  gpu_ids: 0                             
+               image_size: 128                           
+                init_type: xavier                        
+            init_variance: 0.02                          
+                 input_nc: 3                             
+                 is_train: True                          	[default: None]
+                 label_nc: 6                             
+       load_from_opt_file: False                         
+                  log_dir: log                           	[default: ./log]
+                       lr: 0.0002                        
+                 lr_decay: 0.005                         
+                    model: defectgan                     
+                     name: exp0                          
+                      ndf: 64                            
+                      ngf: 64                            
+              num_critics: 5                             
+       num_display_images: 64                            
+               num_epochs: -1                            
+                num_iters: 500000                        
+               num_layers: 5                             
+                  num_res: 6                             
+               num_scales: 2                             
+                optimizer: adam                          
+                output_nc: 3                             
+                    phase: train                         
+          save_epoch_freq: 10                            
+         save_latest_freq: 1000                          
+                scheduler: step                          
+             use_spectral: False                         
+              which_epoch: latest                        
