@@ -23,8 +23,7 @@ class WGanTrainer(BaseTrainer):
     def __init__(self, opt, iters_per_epoch=math.inf):
         super().__init__(opt, iters_per_epoch)
         self.fix_noise = torch.rand(opt.num_display_images, opt.noise_dim, 1, 1)
-        if opt.use_default_name:
-            self.opt.name += f'_{self.model.clipping_limit}'
+        # self.opt.name += f'_{self.model.clipping_limit}'
         # self.fix_noise.requires_grad = True
         # print(f'fix noise required grad = {self.fix_noise.requires_grad}')
 
@@ -126,7 +125,7 @@ class WGanTrainer(BaseTrainer):
         self.model.weight_clipping()
         self.optimizers['D'].zero_grad()
         fake_data = self.model.netG(real_data.shape[0])
-        fake_logits = self.model.netD(fake_data)
+        fake_logits = self.model.netD(fake_data.detach_())
         real_logits = self.model.netD(real_data)
         w_distance = real_logits.mean() - fake_logits.mean()
         d_loss = -w_distance
