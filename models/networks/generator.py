@@ -174,5 +174,6 @@ class DefectGanGenerator(BaseNetwork):
         for dec_blk in self.dec_blk:
             x = dec_blk(x, labels)
         foreground = self.foreground_head(x)
-        spatial_distribution = self.distribution_head(x)
-        return spatial_distribution, foreground
+        spatial_prob = self.distribution_head(x)
+        output = x * (1 - spatial_prob) + foreground * spatial_prob
+        return output, spatial_prob

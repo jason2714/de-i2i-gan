@@ -33,7 +33,7 @@ class DefectGanTrainer(BaseTrainer):
     #     # print(f'fix noise required grad = {self.fix_noise.requires_grad}')
     #     fake_data = self.model.netG(self.fix_noise)
     #     # print(f'fake_data required grad = {fake_data.requires_grad}')
-    #     # print(fake_data.min(), fake_data.max())
+    #     # print(fake_data.min(), fake_djaata.max())
     #     fake_data = (fake_data / 2 + 0.5).detach().cpu()
     #     # print(fake_data.min(), fake_data.max())
     #     # exit()
@@ -80,13 +80,11 @@ class DefectGanTrainer(BaseTrainer):
             # get bg data and truncate them to the same as batch_size of defect data
             bg_data, bg_labels, _ = next(data_loaders['background'])
             bg_data, bg_labels = bg_data[:df_data.size(0)], bg_labels[:df_data.size(0)]
-            # # move to device
-            # df_data, df_labels = df_data.to(self.opt.device), df_labels.to(self.opt.device)
-            # bg_data, bg_labels = bg_data.to(self.opt.device), bg_labels.to(self.opt.device)
 
-            self._train_discriminator_once(df_data, df_labels, bg_data, bg_labels)
+            self._train_discriminator_once(bg_data, df_labels, df_data)
             if self.iters % self.opt.num_critics == 0:
-                self._train_generator_once(df_data, df_labels, bg_data, bg_labels)
+                self._train_generator_once(bg_data, df_labels, df_data)
+
             if self.iters % self.opt.save_latest_freq == 0:
                 self.model.save('latest')
             pbar.set_postfix(w_dis=f'{-sum(self.losses["gan_D"]) / len(self.losses["gan_D"]):.4f}',
@@ -106,64 +104,16 @@ class DefectGanTrainer(BaseTrainer):
     #         val_logits = self.model.netD(batch_data)
     #         self.dis_outputs['val'] += val_logits.flatten().tolist()
 
-    def _train_generator_once(self, df_data, df_labels, bg_data, bg_labels):
+    def _train_generator_once(self, bg_data, df_labels, df_data):
         self.optimizers['G'].zero_grad()
-
-        # generator
-        # normal -> defect -> normal
-        df_prob, df_fg = self.model.netG(bg_data, df_labels)
-        fake_defects = bg_data * (1 - df_prob) + df_fg * df_prob
-        re_df_prob, re_df_fg = self.model.netG(fake_defects, -df_labels)
-        recover_normals = fake_defects * (1 - re_df_prob) + re_df_fg * re_df_prob
-
-        # defect -> normal -> defect
-        nm_prob, nm_fg = self.model.netG(df_data, -df_labels)
-        fake_normals = df_data * (1 - nm_prob) + nm_fg * nm_prob
-        re_nm_prob, re_nm_fg = self.model.netG(fake_normals, df_labels)
-        recover_defects = fake_normals * (1 - re_nm_prob) + re_nm_fg * re_nm_prob
-
-        # discriminator
-        fake_defects_logits = self.model.netD(fake_defects)
-        fake_normals_logits = self.model.netD(fake_normals)
-        recover_defects_logits = self.model.netD(recover_defects)
-        recover_normals_logits = self.model.netD(recover_normals)
-        real_defects_logits = self.model.netD(df_data)
-        real_normals_logits = self.model.netD(bg_data)
-
-        # TODO calculate generator loss
-
-        fake_data = self.model.netG(batch_size)
-        fake_logits = self.model.netD(fake_data)
-        g_loss = -fake_logits.mean()
+        g_loss = self.model('generator', bg_data, df_labels, df_data)
         g_loss.backward()
         self.optimizers['G'].step()
         self.losses['gan_G'].append(g_loss.item())
 
-    def _train_discriminator_once(self, df_data, df_labels, bg_data, bg_labels):
+    def _train_discriminator_once(self, bg_data, df_labels, df_data):
         self.optimizers['D'].zero_grad()
-
-        # generator
-        # normal -> defect
-        df_prob, df_fg = self.model.netG(bg_data, df_labels)
-        fake_defects = bg_data * (1 - df_prob) + df_fg * df_prob
-        # defect -> normal
-        nm_prob, nm_fg = self.model.netG(df_data, -df_labels)
-        fake_normals = df_data * (1 - nm_prob) + nm_fg * nm_prob
-
-        # discriminator
-        fake_defects_logits = self.model.netD(fake_defects.detach_())
-        fake_normals_logits = self.model.netD(fake_normals.detach_())
-        real_defects_logits = self.model.netD(df_data)
-        real_normals_logits = self.model.netD(bg_data)
-
-        # TODO calculate patchGAN loss
-
-        w_distance = real_logits.mean() - fake_logits.mean()
-        d_loss = -w_distance
-        # self.losses['dis_grad'].append(self._cal_dis_grad(real_data, fake_data))
-        # self.optimizers['D'].zero_grad()
+        d_loss = self.model('discriminator', bg_data, df_labels, df_data)
         d_loss.backward()
         self.optimizers['D'].step()
         self.losses['gan_D'].append(d_loss.item())
-        self.dis_outputs['real'] += real_logits.flatten().tolist()
-        self.dis_outputs['fake'] += fake_logits.flatten().tolist()
