@@ -84,7 +84,11 @@ class DefectGanModel(BaseModel):
                        'normal': self._cal_loss(nm_prob, con_labels, 'l1'),
                        'rec_defect': self._cal_loss(rec_df_prob, con_labels, 'l1'),
                        'rec_normal': self._cal_loss(rec_nm_prob, con_labels, 'l1')}
-        return gan_loss, clf_loss, rec_loss, sd_cyc_loss, sd_con_loss
+        return torch.cat(list(gan_loss.values())).mean(), \
+               torch.cat(list(clf_loss.values())).mean(), \
+               torch.cat(list(rec_loss.values())).mean(), \
+               torch.cat(list(sd_cyc_loss.values())).mean(), \
+               torch.cat(list(sd_con_loss.values())).mean()
 
     def _compute_discriminator_loss(self, bg_data, df_labels, df_data):
         # generator
@@ -117,7 +121,8 @@ class DefectGanModel(BaseModel):
         clf_loss = {'real_defect': self._cal_loss(real_defects_logits, df_labels, 'bce'),
                     'real_normal': self._cal_loss(real_normals_logits, nm_labels, 'bce')}
 
-        return gan_loss, clf_loss
+        return torch.cat(list(gan_loss.values())).mean(), \
+               torch.cat(list(clf_loss.values())).mean()
 
     def _generate_fake(self, data, labels):
         seg = labels.expand_as(data)
