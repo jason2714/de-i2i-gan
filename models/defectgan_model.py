@@ -62,28 +62,28 @@ class DefectGanModel(BaseModel):
 
         # gan loss
         fake_labels = torch.ones_like(fake_defects_logits, dtype=torch.float).to(self.netD.device)
-        gan_loss = {'fake_defect': self._cal_gan_loss(fake_defects_logits, fake_labels),
-                    'fake_normal': self._cal_gan_loss(fake_normals_logits, fake_labels)}
+        gan_loss = {'fake_defect': self._cal_loss(fake_defects_logits, fake_labels, 'bce'),
+                    'fake_normal': self._cal_loss(fake_normals_logits, fake_labels, 'bce')}
 
         # clf loss
         nm_labels = torch.ones_like(fake_normals_logits, dtype=torch.float).to(self.netD.device)
-        clf_loss = {'fake_defect': self._cal_clf_loss(fake_defects_logits, df_labels),
-                    'fake_normal': self._cal_clf_loss(fake_normals_logits, nm_labels)}
+        clf_loss = {'fake_defect': self._cal_loss(fake_defects_logits, df_labels, 'bce'),
+                    'fake_normal': self._cal_loss(fake_normals_logits, nm_labels, 'bce')}
 
         # rec loss
-        rec_loss = {'defect': self._cal_diff_loss(recover_defects, df_data),
-                    'normal': self._cal_diff_loss(recover_normals, bg_data)}
+        rec_loss = {'defect': self._cal_loss(recover_defects, df_data, 'l1'),
+                    'normal': self._cal_loss(recover_normals, bg_data, 'l1')}
 
         # sd_cyc loss
-        sd_cyc_loss = {'defect': self._cal_diff_loss(df_prob, rec_df_prob),
-                       'normal': self._cal_diff_loss(nm_prob, rec_nm_prob)}
+        sd_cyc_loss = {'defect': self._cal_loss(df_prob, rec_df_prob, 'l1'),
+                       'normal': self._cal_loss(nm_prob, rec_nm_prob, 'l1')}
 
         # sd_con loss
         con_labels = torch.zeros_like(df_prob, dtype=torch.float).to(self.netG.device)
-        sd_con_loss = {'defect': self._cal_diff_loss(df_prob, con_labels),
-                       'normal': self._cal_diff_loss(nm_prob, con_labels),
-                       'rec_defect': self._cal_diff_loss(rec_df_prob, con_labels),
-                       'rec_normal': self._cal_diff_loss(rec_nm_prob, con_labels)}
+        sd_con_loss = {'defect': self._cal_loss(df_prob, con_labels, 'l1'),
+                       'normal': self._cal_loss(nm_prob, con_labels, 'l1'),
+                       'rec_defect': self._cal_loss(rec_df_prob, con_labels, 'l1'),
+                       'rec_normal': self._cal_loss(rec_nm_prob, con_labels, 'l1')}
         return gan_loss, clf_loss, rec_loss, sd_cyc_loss, sd_con_loss
 
     def _compute_discriminator_loss(self, bg_data, df_labels, df_data):
@@ -107,15 +107,15 @@ class DefectGanModel(BaseModel):
         # gan loss
         real_labels = torch.ones_like(fake_defects_logits, dtype=torch.float).to(self.netD.device)
         fake_labels = torch.zeros_like(real_defects_logits, dtype=torch.float).to(self.netD.device)
-        gan_loss = {'fake_defect': self._cal_gan_loss(fake_defects_logits, fake_labels),
-                    'fake_normal': self._cal_gan_loss(fake_normals_logits, fake_labels),
-                    'real_defect': self._cal_gan_loss(real_defects_logits, real_labels),
-                    'real_normal': self._cal_gan_loss(real_normals_logits, real_labels)}
+        gan_loss = {'fake_defect': self._cal_loss(fake_defects_logits, fake_labels, 'bce'),
+                    'fake_normal': self._cal_loss(fake_normals_logits, fake_labels, 'bce'),
+                    'real_defect': self._cal_loss(real_defects_logits, real_labels, 'bce'),
+                    'real_normal': self._cal_loss(real_normals_logits, real_labels, 'bce')}
 
         # clf loss
         nm_labels = torch.ones_like(real_normals_logits, dtype=torch.float).to(self.netD.device)
-        clf_loss = {'real_defect': self._cal_clf_loss(real_defects_logits, df_labels),
-                    'real_normal': self._cal_clf_loss(real_normals_logits, nm_labels)}
+        clf_loss = {'real_defect': self._cal_loss(real_defects_logits, df_labels, 'bce'),
+                    'real_normal': self._cal_loss(real_normals_logits, nm_labels, 'bce')}
 
         return gan_loss, clf_loss
 
@@ -124,26 +124,16 @@ class DefectGanModel(BaseModel):
         outputs, _ = self.netG(data, seg)
         return outputs
 
-    def _cal_clf_loss(self, logits, targets, loss_type='multilabel'):
-        """Compute binary or softmax cross entropy loss."""
-        if loss_type == 'multilabel':
+    def _cal_loss(self, logits, targets, loss_type):
+        """Compute loss
+            input type for cce and bce is unnormalized logits"""
+        if loss_type in ('bce', 'bce_logits'):
             return binary_cross_entropy_with_logits(logits, targets)
-        elif loss_type == 'multiclass':
+        elif loss_type in ('cce', 'cce_logits'):
             return cross_entropy(logits, targets)
-        else:
-            raise ValueError(f"loss_type: {loss_type} is invalid")
-
-    def _cal_gan_loss(self, logits, targets, loss_type='original'):
-        """Compute binary or softmax cross entropy loss."""
-        if loss_type == 'original':
-            return binary_cross_entropy_with_logits(logits, targets)
-        else:
-            raise ValueError(f"loss_type: {loss_type} is invalid")
-
-    def _cal_diff_loss(self, logits, targets, loss_type='l1'):
-        if loss_type == 'l1':
+        elif loss_type == 'l1':
             return l1_loss(logits, targets)
-        elif loss_type == 'l2':
+        elif loss_type in ('l2', 'mse'):
             return mse_loss(logits, targets)
         else:
             raise ValueError(f"loss_type: {loss_type} is invalid")
