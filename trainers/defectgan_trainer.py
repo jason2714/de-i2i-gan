@@ -16,8 +16,19 @@ from trainers.base_trainer import BaseTrainer
 class DefectGanTrainer(BaseTrainer):
     def __init__(self, opt, iters_per_epoch=math.inf):
         super().__init__(opt, iters_per_epoch)
+        assert len(opt.loss_weight) == 5, f'length of loss weights must be 5, not {len(opt.loss_weight)}'
+        self.loss_weights = {'clf_d': opt.loss_weight[0],
+                             'clf_g': opt.loss_weight[1],
+                             'rec': opt.loss_weight[2],
+                             'sd_cyc': opt.loss_weight[3],
+                             'sd_con': opt.loss_weight[4]}
 
-    # def _cal_dis_grad(self, real_data, fake_data):
+    def _init_lr(self, opt):
+        assert len(opt.lr) in (1, 2), f'length of lr must be 1 or 2, not {len(opt.lr)}'
+        self.lr = {'D': opt.lr[0],
+                   'G': opt.lr[1]} if len(opt.lr) == 2 else opt.lr
+        # def _cal_dis_grad(self, real_data, fake_data):
+
     #     alpha = torch.rand(real_data.shape[0], 1, 1, 1).expand_as(real_data).to(real_data.device)
     #     max_data = Variable(alpha * real_data + (1 - alpha) * fake_data, requires_grad=True)
     #     mix_logits = self.model.netD(max_data)
@@ -106,14 +117,20 @@ class DefectGanTrainer(BaseTrainer):
 
     def _train_generator_once(self, bg_data, df_labels, df_data):
         self.optimizers['G'].zero_grad()
-        g_loss = self.model('generator', bg_data, df_labels, df_data)
+        gan_loss, clf_loss, rec_loss, sd_cyc_loss, sd_con_loss = \
+            self.model('generator', bg_data, df_labels, df_data)
+        g_loss = gan_loss + clf_loss * self.loss_weights['clf_g'] + \
+                 rec_loss * self.loss_weights['rec'] + \
+                 sd_cyc_loss * self.loss_weights['sd_cyc'] + \
+                 sd_con_loss * self.loss_weights['sd_con']
         g_loss.backward()
         self.optimizers['G'].step()
         self.losses['gan_G'].append(g_loss.item())
 
     def _train_discriminator_once(self, bg_data, df_labels, df_data):
         self.optimizers['D'].zero_grad()
-        d_loss = self.model('discriminator', bg_data, df_labels, df_data)
+        gan_loss, clf_loss = self.model('discriminator', bg_data, df_labels, df_data)
+        d_loss = gan_loss + clf_loss * self.loss_weights['clf_d']
         d_loss.backward()
         self.optimizers['D'].step()
         self.losses['gan_D'].append(d_loss.item())

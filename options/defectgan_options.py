@@ -51,8 +51,12 @@ class TrainOptions(DefectGanBaseOptions, BaseTrainOptions):
         parser.add_argument('--optimizer', type=str, default='adam',
                             help='type of optimizer [sgd|rmsprop|adam|adamw]')
         parser.add_argument('--num_iters', type=int, default=500_000, help='how many epochs for learning')
-        parser.add_argument('--lr', type=float, default=2e-4, help='initial learning rate for optimizer')
+        parser.add_argument('--lr', type=float, nargs='+', default=[2e-4],
+                            help='initial learning rate for optimizer, '
+                                 'e.g. [lr] or [lr_d, lr_g]')
         parser.add_argument('--lr_decay', type=float, default=5e-3, help='learning rate decay for optimizer')
+        parser.add_argument('--loss_weight', type=int, nargs='+', default=[2, 5, 5, 5, 1],
+                            help='aggregation weight for each loss, [cls_d, cls_g, rec, sd_cyc, sd_con]')
 
         # parser.add_argument('--niter_decay', type=int, default=0,
         #                     help='# of iter to linearly decay learning rate to zero')

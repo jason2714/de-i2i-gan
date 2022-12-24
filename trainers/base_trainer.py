@@ -28,11 +28,17 @@ class BaseTrainer:
         self.opt.num_iters = self.opt.num_epochs * iters_per_epoch
 
         # initial optimizer and scheduler
+        self._init_lr(opt)
         self._create_optimizer(opt)
         self._create_scheduler(opt)
 
+    def _init_lr(self, opt):
+        """transform lr from list to scalar or dict
+            should be overwrite by child"""
+        self.lr = opt.lr[0]
+
     def _create_optimizer(self, opt):
-        assert isinstance(self.opt.lr, (int, float, dict)), 'type of lr should be scalar or dict'
+        assert isinstance(self.lr, (int, float, dict)), 'type of lr should be scalar or dict'
         optim_args = dict()
         if opt.optimizer == 'sgd':
             optim_cls = optim.SGD
@@ -48,8 +54,8 @@ class BaseTrainer:
             raise NameError(f'optimizer named {opt.optimizer} not defined')
         self.optimizers = {
             network_name: optim_cls(network.parameters(),
-                                    lr=self.opt.lr[network_name] if isinstance(self.opt.lr, dict)
-                                    else self.opt.lr, **optim_args)
+                                    lr=self.lr[network_name] if isinstance(self.lr, dict)
+                                    else self.lr, **optim_args)
             for network_name, network in self.model.networks.items()
         }
 
