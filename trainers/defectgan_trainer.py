@@ -22,12 +22,18 @@ class DefectGanTrainer(BaseTrainer):
                              'rec': opt.loss_weight[2],
                              'sd_cyc': opt.loss_weight[3],
                              'sd_con': opt.loss_weight[4]}
+        self.loss_types = ['gan', 'clf', 'aux']
+        self._init_losses()
 
     def _init_lr(self, opt):
         assert len(opt.lr) in (1, 2), f'length of lr must be 1 or 2, not {len(opt.lr)}'
         self.lr = {'D': opt.lr[0],
                    'G': opt.lr[1]} if len(opt.lr) == 2 else opt.lr
         # def _cal_dis_grad(self, real_data, fake_data):
+
+    def _init_losses(self):
+        self.losses = {loss_type: defaultdict(list)
+                       for loss_type in self.loss_types}
 
     #     alpha = torch.rand(real_data.shape[0], 1, 1, 1).expand_as(real_data).to(real_data.device)
     #     max_data = Variable(alpha * real_data + (1 - alpha) * fake_data, requires_grad=True)
@@ -52,13 +58,13 @@ class DefectGanTrainer(BaseTrainer):
 
     def _write_tf_log(self, writer, epoch):
         # for losses
-        for key, value in self.losses.items():
-            scalar = sum(value) / len(value)
-            writer.add_scalar(f'Loss/{key}', scalar, epoch)
+        for loss_type in self.loss_types:
+            writer.add_scalars(f'{loss_type}', {key: sum(value) / len(value)
+                                                for key, value in self.losses[loss_type].items()}, epoch)
         # for discriminator outputs
-        writer.add_scalars(f'D(x)', {key: sum(value) / len(value)
-                                     for key, value in self.dis_outputs.items()
-                                     }, epoch)
+        # writer.add_scalars(f'D(x)', {key: sum(value) / len(value)
+        #                              for key, value in self.losses.items()
+        #                              if key.startswith('gan_')}, epoch)
         # for generated image
         # generated_images = self._generate_image()
         # nrow = int(math.sqrt(self.opt.num_display_images))
@@ -71,7 +77,7 @@ class DefectGanTrainer(BaseTrainer):
         """
         writer = SummaryWriter(self.opt.log_dir / self.opt.name)
         for epoch in range(1, self.opt.num_epochs + 1):
-            self.losses.clear()
+            self._init_losses()
             self._train_epoch(train_loaders, epoch)
             # if val_loader is not None:
             #     self._val_epoch(val_loaders)
@@ -98,8 +104,13 @@ class DefectGanTrainer(BaseTrainer):
 
             if self.iters % self.opt.save_latest_freq == 0:
                 self.model.save('latest')
-            pbar.set_postfix(w_dis=f'{-sum(self.losses["gan_D"]) / len(self.losses["gan_D"]):.4f}',
-                             g_loss=f'{sum(self.losses["gan_G"]) / (len(self.losses["gan_G"]) + 1e-12):.4f}')
+            pbar.set_postfix(gan_D=f'{-sum(self.losses["gan"]["D"]) / (len(self.losses["gan"]["D"]) + 1e-12):.4f}',
+                             gan_G=f'{sum(self.losses["gan"]["G"]) / (len(self.losses["gan"]["G"]) + 1e-12):.4f}',
+                             clf_D=f'{sum(self.losses["clf"]["D"]) / (len(self.losses["clf"]["D"]) + 1e-12):.4f}',
+                             clf_G=f'{sum(self.losses["clf"]["G"]) / (len(self.losses["clf"]["G"]) + 1e-12):.4f}',
+                             rec=f'{sum(self.losses["aux"]["rec"]) / (len(self.losses["aux"]["rec"]) + 1e-12):.4f}',
+                             sd_cyc=f'{sum(self.losses["aux"]["cyc"]) / (len(self.losses["aux"]["cyc"]) + 1e-12):.4f}',
+                             sd_con=f'{sum(self.losses["aux"]["con"]) / (len(self.losses["aux"]["con"]) + 1e-12):.4f}', )
             # ,
             # dis_grad=f'{max(self.losses["dis_grad"]):.4f}')
         for model_name in self.schedulers.keys():
@@ -125,7 +136,11 @@ class DefectGanTrainer(BaseTrainer):
                  sd_con_loss * self.loss_weights['sd_con']
         g_loss.backward()
         self.optimizers['G'].step()
-        self.losses['gan_G'].append(g_loss.item())
+        self.losses['gan']['G'].append(gan_loss.item())
+        self.losses['clf']['G'].append(clf_loss.item())
+        self.losses['aux']['rec'].append(rec_loss.item())
+        self.losses['aux']['cyc'].append(sd_cyc_loss.item())
+        self.losses['auc']['con'].append(sd_con_loss.item())
 
     def _train_discriminator_once(self, bg_data, df_labels, df_data):
         self.optimizers['D'].zero_grad()
@@ -133,4 +148,5 @@ class DefectGanTrainer(BaseTrainer):
         d_loss = gan_loss + clf_loss * self.loss_weights['clf_d']
         d_loss.backward()
         self.optimizers['D'].step()
-        self.losses['gan_D'].append(d_loss.item())
+        self.losses['gan']['D'].append(gan_loss.item())
+        self.losses['clf']['D'].append(clf_loss.item())
