@@ -34,8 +34,7 @@ class DefectGanModel(BaseModel):
         #     z, mu, logvar = self.encode_z(real_image)
         #     return mu, logvar
         elif mode == 'inference':
-            with torch.no_grad():
-                return self._generate_fake(data, labels)
+            return self._generate_fake(data, labels)
         else:
             raise ValueError("|mode| is invalid")
 
@@ -124,6 +123,7 @@ class DefectGanModel(BaseModel):
         return torch.cat(list(gan_loss.values())).mean(), \
                torch.cat(list(clf_loss.values())).mean()
 
+    @torch.no_grad()
     def _generate_fake(self, data, labels):
         seg = labels.expand_as(data)
         outputs, _ = self.netG(data, seg)

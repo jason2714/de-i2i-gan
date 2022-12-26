@@ -56,7 +56,21 @@ class DefectGanTrainer(BaseTrainer):
     #     # exit()
     #     return fake_data
 
-    def _write_tf_log(self, writer, epoch):
+    def _generate_fake_grids(self, data_loader):
+        generated_images = []
+        bg_data, bg_labels, _ = next(data_loader['background'])
+        labels = torch.eye(self.opt.label_nc)
+        for data in bg_data:
+            fake_data = self.model('inference', data, labels)
+            fake_data = (fake_data / 2 + 0.5).detach().cpu()
+            if not fake_data:
+                generated_images = torch.cat((data.unaqueeze(0), fake_data), dim=0)
+            else:
+                generated_images = torch.cat((generated_images, data.unaqueeze(0), fake_data), dim=0)
+        image_grid = make_grid(generated_images, nrow=self.opt.label_nc)
+        return image_grid
+
+    def _write_tf_log(self, writer, epoch, val_loaders):
         # for losses
         for loss_type in self.loss_types:
             writer.add_scalars(f'{loss_type}', {key: sum(value) / len(value)
@@ -66,10 +80,8 @@ class DefectGanTrainer(BaseTrainer):
         #                              for key, value in self.losses.items()
         #                              if key.startswith('gan_')}, epoch)
         # for generated image
-        # generated_images = self._generate_image()
-        # nrow = int(math.sqrt(self.opt.num_display_images))
-        # image_grid = make_grid(generated_images, nrow=nrow)
-        # writer.add_image('Generated Image', image_grid, epoch)
+        image_grid = self._generate_fake_grids(val_loaders)
+        writer.add_image('Generated Image', image_grid, epoch)
 
     def train(self, train_loaders, val_loaders=None):
         """
@@ -81,7 +93,7 @@ class DefectGanTrainer(BaseTrainer):
             self._train_epoch(train_loaders, epoch)
             # if val_loader is not None:
             #     self._val_epoch(val_loaders)
-            self._write_tf_log(writer, epoch)
+            self._write_tf_log(writer, epoch, val_loaders)
             if epoch % self.opt.save_epoch_freq == 0:
                 self.model.save(epoch)
         writer.close()
@@ -110,7 +122,7 @@ class DefectGanTrainer(BaseTrainer):
                              clf_G=f'{sum(self.losses["clf"]["G"]) / (len(self.losses["clf"]["G"]) + 1e-12):.4f}',
                              rec=f'{sum(self.losses["aux"]["rec"]) / (len(self.losses["aux"]["rec"]) + 1e-12):.4f}',
                              sd_cyc=f'{sum(self.losses["aux"]["cyc"]) / (len(self.losses["aux"]["cyc"]) + 1e-12):.4f}',
-                             sd_con=f'{sum(self.losses["aux"]["con"]) / (len(self.losses["aux"]["con"]) + 1e-12):.4f}', )
+                             sd_con=f'{sum(self.losses["aux"]["con"]) / (len(self.losses["aux"]["con"]) + 1e-12):.4f}')
             # ,
             # dis_grad=f'{max(self.losses["dis_grad"]):.4f}')
         for model_name in self.schedulers.keys():

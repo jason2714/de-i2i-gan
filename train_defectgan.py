@@ -77,29 +77,29 @@ def main():
     }
     for data_type in DATATYPE:
         print(f'{len(train_loaders[data_type].dataset)} images in train {data_type} set')
-    val_loaders = None
-    if opt.phase == 'val':
-        val_transform = transforms.Compose([
-            transforms.Resize(opt.image_sideze),
-            transforms.CenterCrop((opt.image_size, opt.image_size)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-        ])
-        val_datasets = {
-            data_type: dataset_cls(opt, phase='val', data_type=data_type, transform=val_transform)
-            for data_type in DATATYPE
-        }
-        val_loaders = {
-            data_type: DataLoader(val_dataset, batch_size=opt.batch_size, shuffle=False,
-                                  num_workers=4, worker_init_fn=worker_init_fn)
-            for data_type, val_dataset in val_datasets.items()
-        }
-        for data_type in DATATYPE:
-            print(f'{len(val_loaders[data_type].dataset)} images in train {data_type} set')
+
+    # for val
+    val_transform = transforms.Compose([
+        transforms.Resize(opt.image_size),
+        transforms.CenterCrop((opt.image_size, opt.image_size)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+    ])
+    val_datasets = {
+        data_type: dataset_cls(opt, phase='val', data_type=data_type, transform=val_transform)
+        for data_type in DATATYPE
+    }
+    val_loaders = {
+        data_type: DataLoader(val_dataset, batch_size=opt.num_display_images, shuffle=True,
+                              num_workers=4, worker_init_fn=worker_init_fn)
+        for data_type, val_dataset in val_datasets.items()
+    }
+    for data_type in DATATYPE:
+        print(f'{len(val_loaders[data_type].dataset)} images in val {data_type} set')
+
     # view_data_after_transform(opt, train_loaders)
-    # trainer = find_trainer_using_model_name(opt.model)(opt,
-    #                                                    max(len(train_loaders[data_type]) for data_type in DATATYPE))
-    # trainer.train(train_loaders, val_loaders)
+    trainer = find_trainer_using_model_name(opt.model)(opt, len(train_loaders['background']))
+    trainer.train(train_loaders, val_loaders)
 
 
 if __name__ == '__main__':

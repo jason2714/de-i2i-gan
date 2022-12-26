@@ -40,6 +40,7 @@ class DefectGanBaseOptions(BaseOptions):
 
 class TrainOptions(DefectGanBaseOptions, BaseTrainOptions):
     def __init__(self):
+        super(TrainOptions, self).__init__()
         DefectGanBaseOptions.__init__(self)
         BaseTrainOptions.__init__(self)
 
@@ -47,6 +48,9 @@ class TrainOptions(DefectGanBaseOptions, BaseTrainOptions):
         parser = DefectGanBaseOptions.initialize(self, parser)
         parser = BaseTrainOptions.initialize(self, parser)
 
+        # for displays
+        parser.add_argument('--num_display_images', type=int, default=8,
+                            help='# of display images')
         # for training
         parser.add_argument('--optimizer', type=str, default='adam',
                             help='type of optimizer [sgd|rmsprop|adam|adamw]')
