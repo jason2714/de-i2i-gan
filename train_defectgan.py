@@ -72,7 +72,7 @@ def main():
     }
     train_loaders = {
         data_type: LOADER_CLS[data_type](train_dataset, batch_size=opt.batch_size, shuffle=True,
-                                         num_workers=1, worker_init_fn=worker_init_fn)
+                                         num_workers=4, worker_init_fn=worker_init_fn)
         for data_type, train_dataset in train_datasets.items()
     }
     for data_type in DATATYPE:
@@ -90,17 +90,21 @@ def main():
         for data_type in DATATYPE
     }
     val_loaders = {
-        data_type: DataLoader(val_dataset, batch_size=opt.num_display_images, shuffle=True,
-                              num_workers=4, worker_init_fn=worker_init_fn)
+        data_type: LOADER_CLS[data_type](val_dataset, batch_size=opt.num_display_images, shuffle=True,
+                                         num_workers=4, worker_init_fn=worker_init_fn)
         for data_type, val_dataset in val_datasets.items()
     }
     for data_type in DATATYPE:
         print(f'{len(val_loaders[data_type].dataset)} images in val {data_type} set')
 
     # view_data_after_transform(opt, train_loaders)
-    trainer = find_trainer_using_model_name(opt.model)(opt, len(train_loaders['background']))
+    trainer = find_trainer_using_model_name(opt.model)(opt, len(train_loaders['defects']))
     trainer.train(train_loaders, val_loaders)
 
 
 if __name__ == '__main__':
     main()
+    # script python train_defectgan.py --name test_df
+    # --data_dir A:\research\data --batch_size 16 --num_iters 125000
+    # --loss_weight 1 1 0 0 0
+    # tensorboard --logdir log\test_df

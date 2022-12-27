@@ -28,7 +28,7 @@ class DefectGanTrainer(BaseTrainer):
     def _init_lr(self, opt):
         assert len(opt.lr) in (1, 2), f'length of lr must be 1 or 2, not {len(opt.lr)}'
         self.lr = {'D': opt.lr[0],
-                   'G': opt.lr[1]} if len(opt.lr) == 2 else opt.lr
+                   'G': opt.lr[1]} if len(opt.lr) == 2 else opt.lr[0]
         # def _cal_dis_grad(self, real_data, fake_data):
 
     def _init_losses(self):
@@ -43,31 +43,22 @@ class DefectGanTrainer(BaseTrainer):
     #     # mix_grad = max_data.grad
     #     return mix_grad.max()
     #     # return mean(fake_grad)
-    #
-    # @torch.no_grad()
-    # def _generate_image(self):
-    #     # print(f'inside generate_image')
-    #     # print(f'fix noise required grad = {self.fix_noise.requires_grad}')
-    #     fake_data = self.model.netG(self.fix_noise)
-    #     # print(f'fake_data required grad = {fake_data.requires_grad}')
-    #     # print(fake_data.min(), fake_djaata.max())
-    #     fake_data = (fake_data / 2 + 0.5).detach().cpu()
-    #     # print(fake_data.min(), fake_data.max())
-    #     # exit()
-    #     return fake_data
 
+    @torch.no_grad()
     def _generate_fake_grids(self, data_loader):
-        generated_images = []
+        generated_images = None
         bg_data, bg_labels, _ = next(data_loader['background'])
         labels = torch.eye(self.opt.label_nc)
         for data in bg_data:
+            data = data.unsqueeze(0)
             fake_data = self.model('inference', data, labels)
+            data = data / 2 + 0.5
             fake_data = (fake_data / 2 + 0.5).detach().cpu()
-            if not fake_data:
-                generated_images = torch.cat((data.unaqueeze(0), fake_data), dim=0)
+            if generated_images is None:
+                generated_images = torch.cat((data, fake_data), dim=0)
             else:
-                generated_images = torch.cat((generated_images, data.unaqueeze(0), fake_data), dim=0)
-        image_grid = make_grid(generated_images, nrow=self.opt.label_nc)
+                generated_images = torch.cat((generated_images, data, fake_data), dim=0)
+        image_grid = make_grid(generated_images, nrow=(self.opt.label_nc + 1))
         return image_grid
 
     def _write_tf_log(self, writer, epoch, val_loaders):
@@ -108,6 +99,8 @@ class DefectGanTrainer(BaseTrainer):
 
             # get bg data and truncate them to the same as batch_size of defect data
             bg_data, bg_labels, _ = next(data_loaders['background'])
+            if bg_data.size(0) < df_data.size(0):
+                bg_data, bg_labels, _ = next(data_loaders['background'])
             bg_data, bg_labels = bg_data[:df_data.size(0)], bg_labels[:df_data.size(0)]
 
             self._train_discriminator_once(bg_data, df_labels, df_data)
@@ -152,7 +145,7 @@ class DefectGanTrainer(BaseTrainer):
         self.losses['clf']['G'].append(clf_loss.item())
         self.losses['aux']['rec'].append(rec_loss.item())
         self.losses['aux']['cyc'].append(sd_cyc_loss.item())
-        self.losses['auc']['con'].append(sd_con_loss.item())
+        self.losses['aux']['con'].append(sd_con_loss.item())
 
     def _train_discriminator_once(self, bg_data, df_labels, df_data):
         self.optimizers['D'].zero_grad()

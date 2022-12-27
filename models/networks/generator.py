@@ -77,7 +77,7 @@ class DefectGanGenerator(BaseNetwork):
             conv_blk.append(ConvBlock(crt_dim, crt_dim * 2,
                                       kernel_size=(4, 4),
                                       stride=(2, 2),
-                                      padding='same',
+                                      padding=1,
                                       padding_mode='reflect',
                                       norm_layer=nn.BatchNorm2d,
                                       act_layer='leaky_relu',
@@ -167,13 +167,15 @@ class DefectGanGenerator(BaseNetwork):
     def forward(self, x, labels):
         assert isinstance(x, torch.Tensor), "x must be Original Images: Torch.Tensor"
         # expand labels' shape to the same as data
-        x, labels = x.to(self.device), labels.expand_as(x).to(self.device)
-        x = self.stem(x)
+        x, labels = x.to(self.device), labels.to(self.device)
+
+        feat = self.stem(x)
         for enc_blk in self.enc_blk:
-            x = enc_blk(x)
+            feat = enc_blk(feat)
         for dec_blk in self.dec_blk:
-            x = dec_blk(x, labels)
-        foreground = self.foreground_head(x)
-        spatial_prob = self.distribution_head(x)
+            feat = dec_blk(feat, labels)
+        foreground = self.foreground_head(feat)
+        spatial_prob = self.distribution_head(feat)
+
         output = x * (1 - spatial_prob) + foreground * spatial_prob
         return output, spatial_prob

@@ -39,7 +39,9 @@ class DefectGanModel(BaseModel):
             raise ValueError("|mode| is invalid")
 
     def _compute_generator_loss(self, bg_data, df_labels, df_data):
-        seg = df_labels.expand_as(bg_data)
+        bg_data, df_labels, df_data = bg_data.to(self.netG.device), \
+                                      df_labels.to(self.netG.device), df_data.to(self.netG.device)
+        seg = df_labels.reshape(*df_labels.size(), 1, 1)
 
         # normal -> defect -> normal
         fake_defects, df_prob = self.netG(bg_data, seg)
@@ -50,8 +52,8 @@ class DefectGanModel(BaseModel):
         recover_defects, rec_nm_prob = self.netG(fake_normals, seg)
 
         # discriminator
-        fake_defects_logits = self.netD(fake_defects)
-        fake_normals_logits = self.netD(fake_normals)
+        fake_defects_src, fake_defects_cls = self.netD(fake_defects)
+        fake_normals_src, fake_normals_cls = self.netD(fake_normals)
 
         # recover_defects_logits = self.netD(recover_defects)
         # recover_normals_logits = self.netD(recover_normals)
@@ -60,14 +62,14 @@ class DefectGanModel(BaseModel):
         # real_normals_logits = self.netD(bg_data)
 
         # gan loss
-        fake_labels = torch.ones_like(fake_defects_logits, dtype=torch.float).to(self.netD.device)
-        gan_loss = {'fake_defect': self._cal_loss(fake_defects_logits, fake_labels, 'bce'),
-                    'fake_normal': self._cal_loss(fake_normals_logits, fake_labels, 'bce')}
+        fake_labels = torch.ones_like(fake_defects_src, dtype=torch.float).to(self.netD.device)
+        gan_loss = {'fake_defect': self._cal_loss(fake_defects_src, fake_labels, 'bce'),
+                    'fake_normal': self._cal_loss(fake_normals_src, fake_labels, 'bce')}
 
         # clf loss
-        nm_labels = torch.ones_like(fake_normals_logits, dtype=torch.float).to(self.netD.device)
-        clf_loss = {'fake_defect': self._cal_loss(fake_defects_logits, df_labels, 'bce'),
-                    'fake_normal': self._cal_loss(fake_normals_logits, nm_labels, 'bce')}
+        nm_labels = torch.ones_like(fake_normals_cls, dtype=torch.float).to(self.netD.device)
+        clf_loss = {'fake_defect': self._cal_loss(fake_defects_cls, df_labels, 'bce'),
+                    'fake_normal': self._cal_loss(fake_normals_cls, nm_labels, 'bce')}
 
         # rec loss
         rec_loss = {'defect': self._cal_loss(recover_defects, df_data, 'l1'),
@@ -83,15 +85,17 @@ class DefectGanModel(BaseModel):
                        'normal': self._cal_loss(nm_prob, con_labels, 'l1'),
                        'rec_defect': self._cal_loss(rec_df_prob, con_labels, 'l1'),
                        'rec_normal': self._cal_loss(rec_nm_prob, con_labels, 'l1')}
-        return torch.cat(list(gan_loss.values())).mean(), \
-               torch.cat(list(clf_loss.values())).mean(), \
-               torch.cat(list(rec_loss.values())).mean(), \
-               torch.cat(list(sd_cyc_loss.values())).mean(), \
-               torch.cat(list(sd_con_loss.values())).mean()
+        return torch.stack(list(gan_loss.values())).mean(), \
+               torch.stack(list(clf_loss.values())).mean(), \
+               torch.stack(list(rec_loss.values())).mean(), \
+               torch.stack(list(sd_cyc_loss.values())).mean(), \
+               torch.stack(list(sd_con_loss.values())).mean()
 
     def _compute_discriminator_loss(self, bg_data, df_labels, df_data):
+        bg_data, df_labels, df_data = bg_data.to(self.netG.device), \
+                                      df_labels.to(self.netG.device), df_data.to(self.netG.device)
         # generator
-        seg = df_labels.expand_as(bg_data)
+        seg = df_labels.reshape(*df_labels.size(), 1, 1)
         with torch.no_grad():
             # normal -> defect
             fake_defects, df_prob = self.netG(bg_data, seg)
@@ -102,30 +106,30 @@ class DefectGanModel(BaseModel):
         fake_normals.requires_grad = True
 
         # discriminator
-        fake_defects_logits = self.netD(fake_defects.detach_())
-        fake_normals_logits = self.netD(fake_normals.detach_())
-        real_defects_logits = self.netD(df_data)
-        real_normals_logits = self.netD(bg_data)
+        fake_defects_src, _ = self.netD(fake_defects.detach_())
+        fake_normals_src, _ = self.netD(fake_normals.detach_())
+        real_defects_src, real_defects_cls = self.netD(df_data)
+        real_normals_src, real_normals_cls = self.netD(bg_data)
 
         # gan loss
-        real_labels = torch.ones_like(fake_defects_logits, dtype=torch.float).to(self.netD.device)
-        fake_labels = torch.zeros_like(real_defects_logits, dtype=torch.float).to(self.netD.device)
-        gan_loss = {'fake_defect': self._cal_loss(fake_defects_logits, fake_labels, 'bce'),
-                    'fake_normal': self._cal_loss(fake_normals_logits, fake_labels, 'bce'),
-                    'real_defect': self._cal_loss(real_defects_logits, real_labels, 'bce'),
-                    'real_normal': self._cal_loss(real_normals_logits, real_labels, 'bce')}
+        real_labels = torch.ones_like(real_defects_src, dtype=torch.float).to(self.netD.device)
+        fake_labels = torch.zeros_like(fake_defects_src, dtype=torch.float).to(self.netD.device)
+        gan_loss = {'fake_defect': self._cal_loss(fake_defects_src, fake_labels, 'bce'),
+                    'fake_normal': self._cal_loss(fake_normals_src, fake_labels, 'bce'),
+                    'real_defect': self._cal_loss(real_defects_src, real_labels, 'bce'),
+                    'real_normal': self._cal_loss(real_normals_src, real_labels, 'bce')}
 
         # clf loss
-        nm_labels = torch.ones_like(real_normals_logits, dtype=torch.float).to(self.netD.device)
-        clf_loss = {'real_defect': self._cal_loss(real_defects_logits, df_labels, 'bce'),
-                    'real_normal': self._cal_loss(real_normals_logits, nm_labels, 'bce')}
-
-        return torch.cat(list(gan_loss.values())).mean(), \
-               torch.cat(list(clf_loss.values())).mean()
+        nm_labels = torch.ones_like(real_normals_cls, dtype=torch.float).to(self.netD.device)
+        clf_loss = {'real_defect': self._cal_loss(real_defects_cls, df_labels, 'bce'),
+                    'real_normal': self._cal_loss(real_normals_cls, nm_labels, 'bce')}
+        return torch.stack(list(gan_loss.values())).mean(), \
+               torch.stack(list(clf_loss.values())).mean()
 
     @torch.no_grad()
     def _generate_fake(self, data, labels):
-        seg = labels.expand_as(data)
+        data, labels = data.to(self.netG.device), labels.to(self.netG.device)
+        seg = labels.reshape(*labels.size(), 1, 1)
         outputs, _ = self.netG(data, seg)
         return outputs
 

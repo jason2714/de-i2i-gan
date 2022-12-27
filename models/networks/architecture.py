@@ -224,8 +224,8 @@ class SPADEResBlock(nn.Module):
         if self.add_noise:
             x = self.noise_0(x)
         x = self.spade_norm_1(x, seg)
-        x = self.act_0(x)
-        x = self.conv_0(x)
+        x = self.act_1(x)
+        x = self.conv_1(x)
         if self.add_noise:
             x = self.noise_1(x)
         return x

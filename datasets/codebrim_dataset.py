@@ -3,7 +3,7 @@ import json
 import torch
 from torch.utils.data import Dataset
 from PIL import Image
-
+from data.codebrim.create_annos import create_annos
 
 class CodeBrimDataset(Dataset):
 
@@ -19,6 +19,8 @@ class CodeBrimDataset(Dataset):
         # initialize filename to label map
         anno_dir = opt.data_dir / opt.dataset_name / 'metadata'
         anno_path = anno_dir / f'{data_type}.json'
+        if not anno_path.exists():
+            create_annos(anno_dir)
         fn_label_map = json.loads(anno_path.read_text())
 
         # initialize label to index map
@@ -37,7 +39,7 @@ class CodeBrimDataset(Dataset):
         image = Image.open(image_fn)
         if self.transform is not None:
             image = self.transform(image)
-        return image, torch.LongTensor(label), str(image_fn)
+        return image, torch.FloatTensor(label), str(image_fn)
 
     def __len__(self):
         return self.len
