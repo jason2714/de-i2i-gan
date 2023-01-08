@@ -64,8 +64,8 @@ class DefectGanTrainer(BaseTrainer):
     def _write_tf_log(self, writer, epoch, val_loaders):
         # for losses
         for loss_type in self.loss_types:
-            writer.add_scalars(f'{loss_type}', {key: sum(value) / len(value)
-                                                for key, value in self.losses[loss_type].items()}, epoch)
+            writer.add_scalars(f'Losses/{loss_type}', {key: sum(value) / len(value)
+                                                       for key, value in self.losses[loss_type].items()}, epoch)
         # for discriminator outputs
         # writer.add_scalars(f'D(x)', {key: sum(value) / len(value)
         #                              for key, value in self.losses.items()
@@ -99,8 +99,8 @@ class DefectGanTrainer(BaseTrainer):
 
             # get bg data and truncate them to the same as batch_size of defect data
             bg_data, bg_labels, _ = next(data_loaders['background'])
-            if bg_data.size(0) < df_data.size(0):
-                bg_data, bg_labels, _ = next(data_loaders['background'])
+            # if bg_data.size(0) < df_data.size(0):
+            #     bg_data, bg_labels, _ = next(data_loaders['background'])
             bg_data, bg_labels = bg_data[:df_data.size(0)], bg_labels[:df_data.size(0)]
 
             self._train_discriminator_once(bg_data, df_labels, df_data)
@@ -109,7 +109,7 @@ class DefectGanTrainer(BaseTrainer):
 
             if self.iters % self.opt.save_latest_freq == 0:
                 self.model.save('latest')
-            pbar.set_postfix(gan_D=f'{-sum(self.losses["gan"]["D"]) / (len(self.losses["gan"]["D"]) + 1e-12):.4f}',
+            pbar.set_postfix(gan_D=f'{sum(self.losses["gan"]["D"]) / (len(self.losses["gan"]["D"]) + 1e-12):.4f}',
                              gan_G=f'{sum(self.losses["gan"]["G"]) / (len(self.losses["gan"]["G"]) + 1e-12):.4f}',
                              clf_D=f'{sum(self.losses["clf"]["D"]) / (len(self.losses["clf"]["D"]) + 1e-12):.4f}',
                              clf_G=f'{sum(self.losses["clf"]["G"]) / (len(self.losses["clf"]["G"]) + 1e-12):.4f}',

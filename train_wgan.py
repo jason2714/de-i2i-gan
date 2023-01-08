@@ -23,7 +23,7 @@ def main():
     ])
     train_dataset = dataset_cls(opt, phase='train', transform=train_transform)
     train_loader = DataLoader(train_dataset, batch_size=opt.batch_size, shuffle=True,
-                              num_workers=4, worker_init_fn=worker_init_fn)
+                              num_workers=4, worker_init_fn=worker_init_fn, pin_memory=True)
     print(f'{len(train_loader.dataset)} images in train set')  # Should print 36000
     if opt.phase == 'val':
         val_transform = transforms.Compose([
@@ -32,7 +32,7 @@ def main():
         ])
         val_dataset = dataset_cls(opt, phase='val', transform=val_transform)
         val_loader = DataLoader(val_dataset, batch_size=opt.batch_size, shuffle=False,
-                                num_workers=4, worker_init_fn=worker_init_fn)
+                                num_workers=4, worker_init_fn=worker_init_fn, pin_memory=True)
         print(f'{len(val_loader.dataset)} images in val set')  # Should print 4000
 
     trainer = find_trainer_using_model_name(opt.model)(opt, len(train_loader))

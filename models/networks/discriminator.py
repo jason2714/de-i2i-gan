@@ -89,8 +89,8 @@ class DefectGanDiscriminator(BaseNetwork):
 
     def forward(self, x):
         assert isinstance(x, torch.Tensor), "x must be Original Images: Torch.Tensor"
-        x = x.to(self.device)
+        # x = x.to(self.device, non_blocking=True)
         feat = self.enc_blk(x)
-        cls_logits = self.cls_clf(feat)
         src_logits = self.src_clf(feat)
+        cls_logits = self.cls_clf(feat)
         return src_logits, cls_logits.reshape((cls_logits.size(0), cls_logits.size(1)))

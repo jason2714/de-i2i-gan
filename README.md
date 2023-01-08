@@ -44,6 +44,7 @@ noise = (B, 1, H, W)
 5. TTUR
 6. SpectralNorm Of course
 7. use res-blk in spade
+8. adaptive adjust loss weight
 ```
 The network architecture of D is the same as StarGAN, which includes a D src to distinguish faked samples from real ones using PatchGAN and a D cls to predict the categories of generated defect.
 ![starGAN-D.png](images/starD.png)

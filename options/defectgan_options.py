@@ -35,6 +35,12 @@ class DefectGanBaseOptions(BaseOptions):
         parser.add_argument('--ndf', type=int, default=64, help='# of dis filters in first conv layer')
         parser.add_argument('--num_layers', type=int, default=5, help='# of dis encode layers')
 
+        # for model
+        parser.add_argument('--init_type', type=str, default='normal',
+                            help='network initialization [normal|xavier|kaiming|orthogonal]')
+        parser.add_argument('--init_variance', type=float, default=0.02,
+                            help='variance of the initialization distribution')
+
         return parser
 
 

@@ -28,7 +28,7 @@ class WGanTrainer(BaseTrainer):
         # print(f'fix noise required grad = {self.fix_noise.requires_grad}')
 
     def _cal_dis_grad(self, real_data, fake_data):
-        alpha = torch.rand(real_data.shape[0], 1, 1, 1).expand_as(real_data).to(real_data.device)
+        alpha = torch.rand(real_data.shape[0], 1, 1, 1).expand_as(real_data).to(real_data.device, non_blocking=True)
         max_data = Variable(alpha * real_data + (1 - alpha) * fake_data, requires_grad=True)
         mix_logits = self.model.netD(max_data)
         mix_grad = grad(mix_logits, max_data, grad_outputs=torch.ones_like(mix_logits))[0]
@@ -89,7 +89,7 @@ class WGanTrainer(BaseTrainer):
             pbar.set_description(f'Epoch: [{epoch}/{self.opt.num_epochs}], '
                                  f'Iter: [{self.iters}/{self.opt.num_iters}]')
             # print(batch_data.min(), batch_data.max())
-            batch_data = batch_data.to(self.opt.device)
+            batch_data = batch_data.to(self.opt.device, non_blocking=True)
             self._train_discriminator_once(batch_data)
             if self.iters % self.opt.num_critics == 0:
                 self._train_generator_once(batch_data.shape[0])
@@ -108,7 +108,7 @@ class WGanTrainer(BaseTrainer):
         # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
         for batch_data in pbar:
             pbar.set_description('Validating... ')
-            batch_data = batch_data.to(self.opt.device)
+            batch_data = batch_data.to(self.opt.device, non_blocking=True)
             val_logits = self.model.netD(batch_data)
             self.dis_outputs['val'] += val_logits.flatten().tolist()
 

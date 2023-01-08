@@ -167,7 +167,7 @@ class DefectGanGenerator(BaseNetwork):
     def forward(self, x, labels):
         assert isinstance(x, torch.Tensor), "x must be Original Images: Torch.Tensor"
         # expand labels' shape to the same as data
-        x, labels = x.to(self.device), labels.to(self.device)
+        # x, labels = x.to(self.device, non_blocking=True), labels.to(self.device, non_blocking=True)
 
         feat = self.stem(x)
         for enc_blk in self.enc_blk:
