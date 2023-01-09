@@ -1,3 +1,4 @@
+from metrics.inception import InceptionV3
 from options.base_options import BaseOptions
 from options.train_options import BaseTrainOptions
 from options.test_options import BaseTestOptions
@@ -84,5 +85,12 @@ class TestOptions(DefectGanBaseOptions, BaseTestOptions):
     def initialize(self, parser):
         DefectGanBaseOptions.initialize(self, parser)
         BaseTestOptions.initialize(self, parser)
+
+        parser.add_argument('--dims', type=int, default=2048,
+                            choices=list(InceptionV3.BLOCK_INDEX_BY_DIM),
+                            help=('Dimensionality of Inception features to use. '
+                                  'By default, uses pool3 features'))
+        parser.add_argument('--num_imgs', type=int, default=50_000, help='use # images to calculate FID score')
+        parser.add_argument('--npz_path', type=str, required=True, help='Paths to .npz statistic files')
         # for testing
         return parser

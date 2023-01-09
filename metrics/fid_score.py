@@ -43,7 +43,7 @@ except ImportError:
     def tqdm(x):
         return x
 
-from inception import InceptionV3
+from metrics.inception import InceptionV3
 
 parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
 parser.add_argument('--batch-size', type=int, default=128,
@@ -60,6 +60,7 @@ parser.add_argument('--dims', type=int, default=2048,
 parser.add_argument('path', type=str, nargs=2,
                     help=('Paths to the generated images or '
                           'to .npz statistic files'))
+parser.add_argument('--num-imgs', type=int, nargs=2, default=[None, None], help='use # images to calculate FID score')
 parser.add_argument('--save_npz', action='store_true', help='whether save the first statistics to npz file')
 
 IMAGE_EXTENSIONS = {'bmp', 'jpg', 'jpeg', 'pgm', 'png', 'ppm',
@@ -83,7 +84,7 @@ class ImagePathDataset(torch.utils.data.Dataset):
 
 
 def get_activations(files, model, batch_size=50, dims=2048, device='cpu',
-                    num_workers=1):
+                    num_workers=1, num_img=None):
     """Calculates the activations of the pool_3 layer for all images.
     Params:
     -- files       : List of image files paths
@@ -113,9 +114,9 @@ def get_activations(files, model, batch_size=50, dims=2048, device='cpu',
         transforms.RandomCrop((image_size, image_size), pad_if_needed=True),
         transforms.ToTensor()
     ])
-    file_len = 50_000
     dataset = ImagePathDataset(files, transforms=fid_transforms)
-    sampler = RandomSampler(dataset, replacement=False, num_samples=file_len)
+    num_img = len(dataset) if num_img is None else num_img
+    sampler = RandomSampler(dataset, replacement=False, num_samples=num_img)
     dataloader = DataLoader(dataset,
                             sampler=sampler,
                             batch_size=batch_size,
@@ -208,7 +209,7 @@ def calculate_frechet_distance(mu1, sigma1, mu2, sigma2, eps=1e-6):
 
 
 def calculate_activation_statistics(files, model, batch_size=50, dims=2048,
-                                    device='cpu', num_workers=1):
+                                    device='cpu', num_workers=1, num_img=None):
     """Calculation of the statistics used by the FID.
     Params:
     -- files       : List of image files paths
@@ -225,14 +226,14 @@ def calculate_activation_statistics(files, model, batch_size=50, dims=2048,
     -- sigma : The covariance matrix of the activations of the pool_3 layer of
                the inception model.
     """
-    act = get_activations(files, model, batch_size, dims, device, num_workers)
+    act = get_activations(files, model, batch_size, dims, device, num_workers, num_img)
     mu = np.mean(act, axis=0)
     sigma = np.cov(act, rowvar=False)
     return mu, sigma
 
 
 def compute_statistics_of_path(path, model, batch_size, dims, device,
-                               num_workers=1, save_npz=False):
+                               num_workers=1, num_img=None, save_npz=False):
     if path.endswith('.npz'):
         with np.load(path) as f:
             m, s = f['mu'][:], f['sigma'][:]
@@ -241,7 +242,7 @@ def compute_statistics_of_path(path, model, batch_size, dims, device,
         files = sorted([file for ext in IMAGE_EXTENSIONS
                         for file in path.glob('*.{}'.format(ext))])
         m, s = calculate_activation_statistics(files, model, batch_size,
-                                               dims, device, num_workers)
+                                               dims, device, num_workers, num_img)
         if save_npz:
             save_id = 0
             save_name = f'{path}{save_id:02d}.npz'
@@ -253,22 +254,22 @@ def compute_statistics_of_path(path, model, batch_size, dims, device,
     return m, s
 
 
-def calculate_fid(inputs, batch_size, device, dims, num_workers=1, save_npz=False):
-    block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[dims]
-
-    model = InceptionV3([block_idx]).to(device, non_blocking=True)
+def calculate_fid(inputs, batch_size, device, dims, num_workers=1, num_imgs=(None, None), save_npz=False, model=None):
+    if model is None:
+        block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[dims]
+        model = InceptionV3([block_idx]).to(device, non_blocking=True)
     m_s = []
-    for input_data in inputs:
+    for input_data, num_img in zip(inputs, num_imgs):
         if isinstance(input_data, str):
             if not os.path.exists(input_data):
                 raise RuntimeError('Invalid path: %s' % input_data)
             m, s = compute_statistics_of_path(input_data, model, batch_size,
-                                              dims, device, num_workers, save_npz)
+                                              dims, device, num_workers, num_img, save_npz)
             m_s += [m, s]
         elif isinstance(input_data, (tuple, list)):
             for data in input_data:
                 assert isinstance(data, np.ndarray), 'input type of mu and sigma must be np.ndarray'
-            m_s += input_data
+            m_s = [*m_s, *input_data]
         else:
             raise ValueError(f'Invalid input type {type(input_data)} expected tuple or str')
     fid_value = calculate_frechet_distance(*m_s)
@@ -295,6 +296,7 @@ def main():
                                   device,
                                   args.dims,
                                   num_workers,
+                                  args.num_imgs,
                                   args.save_npz)
         print('FID: ', fid_value)
 

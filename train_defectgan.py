@@ -84,7 +84,7 @@ def main():
     # for val
     val_transform = transforms.Compose([
         transforms.Resize(opt.image_size),
-        transforms.CenterCrop((opt.image_size, opt.image_size)),
+        transforms.RandomCrop((opt.image_size, opt.image_size), pad_if_needed=True),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     ])

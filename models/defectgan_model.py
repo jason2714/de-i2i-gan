@@ -27,13 +27,19 @@ class DefectGanModel(BaseModel):
 
     def __call__(self, mode, data, labels, df_data=None):
         if mode == 'generator':
+            self.netD.eval()
+            self.netG.train()
             return self._compute_generator_loss(data, labels, df_data)
         elif mode == 'discriminator':
+            self.netD.train()
+            self.netG.eval()
             return self._compute_discriminator_loss(data, labels, df_data)
         # elif mode == 'encode_only':
         #     z, mu, logvar = self.encode_z(real_image)
         #     return mu, logvar
         elif mode == 'inference':
+            self.netD.eval()
+            self.netG.eval()
             return self._generate_fake(data, labels)
         else:
             raise ValueError("|mode| is invalid")
