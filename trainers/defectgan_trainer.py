@@ -1,3 +1,5 @@
+from metrics.fid_score import calculate_fid
+from metrics.inception import InceptionV3
 from trainers.base_trainer import BaseTrainer
 import torch
 from collections import defaultdict
@@ -5,10 +7,7 @@ from tqdm import tqdm
 from torchvision.utils import make_grid
 import math
 from torch.utils.tensorboard import SummaryWriter
-from torch import optim
-import inspect
-from models import find_model_using_name
-from torch.autograd import grad, Variable
+from metrics.fid_score import calculate_fid_from_model
 
 from trainers.base_trainer import BaseTrainer
 
@@ -24,6 +23,11 @@ class DefectGanTrainer(BaseTrainer):
                              'sd_con': opt.loss_weight[4]}
         self.loss_types = ['gan', 'clf', 'aux']
         self._init_losses()
+        if opt.phase == 'val':
+            block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[opt.dims]
+            self.inception_model = InceptionV3([block_idx]).to(opt.device, non_blocking=True)
+            self.inception_model.eval()
+            self.metrics = dict()
 
     def _init_lr(self, opt):
         assert len(opt.lr) in (1, 2), f'length of lr must be 1 or 2, not {len(opt.lr)}'
@@ -82,11 +86,13 @@ class DefectGanTrainer(BaseTrainer):
         for epoch in range(1, self.opt.num_epochs + 1):
             self._init_losses()
             self._train_epoch(train_loaders, epoch)
-            # if val_loader is not None:
-            #     self._val_epoch(val_loaders)
             self._write_tf_log(writer, epoch, val_loaders)
             if epoch % self.opt.save_epoch_freq == 0:
                 self.model.save(epoch)
+                if self.opt.phase == 'val':
+                    self._val_epoch(val_loaders, epoch)
+                    for metric in self.metrics:
+                        writer.add_scalar(f'Metrics/{metric}', self.metrics[metric], epoch)
         writer.close()
 
     def _train_epoch(self, data_loaders, epoch):
@@ -121,15 +127,11 @@ class DefectGanTrainer(BaseTrainer):
         for model_name in self.schedulers.keys():
             self.schedulers[model_name].step()
 
-    # @torch.no_grad()
-    # def _val_epoch(self, data_loader):
-    #     pbar = tqdm(data_loader, colour='MAGENTA')
-    #     # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
-    #     for batch_data, labels, _ in pbar:
-    #         pbar.set_description('Validating... ')
-    #         batch_data = batch_data.to(self.opt.device)
-    #         val_logits = self.model.netD(batch_data)
-    #         self.dis_outputs['val'] += val_logits.flatten().tolist()
+    @torch.no_grad()
+    def _val_epoch(self, data_loader, epoch):
+        fid_value = calculate_fid_from_model(self.opt, self.model, self.inception_model, data_loader, 'Validating... ')
+        print(f'FID: {fid_value} at epoch {epoch}')
+        self.metrics['fid'] = fid_value
 
     def _train_generator_once(self, bg_data, df_labels, df_data):
         self.optimizers['G'].zero_grad()

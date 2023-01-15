@@ -42,8 +42,10 @@ except ImportError:
     # If tqdm is not available, provide a mock version of it
     def tqdm(x):
         return x
-
-from metrics.inception import InceptionV3
+try:
+    from metrics.inception import InceptionV3
+except ModuleNotFoundError:
+    from inception import InceptionV3
 
 parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
 parser.add_argument('--batch-size', type=int, default=128,
@@ -254,6 +256,35 @@ def compute_statistics_of_path(path, model, batch_size, dims, device,
     return m, s
 
 
+def calculate_fid_from_model(opt, model, inception_model, data_loader, description='Testing... '):
+    pred_arr = None
+    pbar = tqdm(data_loader['defects'], colour='MAGENTA')
+    # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
+    for df_data, df_labels, _ in pbar:
+        pbar.set_description(description)
+        bg_data, bg_labels, file_paths = next(data_loader['background'])
+        bg_data, bg_labels = bg_data[:df_data.size(0)], bg_labels[:df_data.size(0)]
+        fake_imgs = model('inference', bg_data, df_labels)
+        # save_generated_images(opt, file_paths, fake_imgs)
+        fake_imgs = (fake_imgs + 1) / 2
+        pred = inception_model(fake_imgs)[0]
+        # If model output is not scalar, apply global spatial average pooling.
+        # This happens if you choose a dimensionality not equal 2048.
+        if pred.size(2) != 1 or pred.size(3) != 1:
+            pred = adaptive_avg_pool2d(pred, output_size=(1, 1))
+        pred = pred.squeeze(3).squeeze(2).cpu().numpy()
+        if pred_arr is None:
+            pred_arr = pred
+        else:
+            pred_arr = np.concatenate((pred_arr, pred), axis=0)
+    mu = np.mean(pred_arr, axis=0)
+    sigma = np.cov(pred_arr, rowvar=False)
+    fid_value = calculate_fid((opt.npz_path, [mu, sigma]), opt.batch_size,
+                              opt.device, opt.dims,
+                              num_workers=4, model=inception_model)
+    return fid_value
+
+
 def calculate_fid(inputs, batch_size, device, dims, num_workers=1, num_imgs=(None, None), save_npz=False, model=None):
     if model is None:
         block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[dims]
@@ -290,15 +321,14 @@ def main():
         num_workers = min(num_avail_cpus, 4)
     else:
         num_workers = args.num_workers
-    for i in range(100):
-        fid_value = calculate_fid(args.path,
-                                  args.batch_size,
-                                  device,
-                                  args.dims,
-                                  num_workers,
-                                  args.num_imgs,
-                                  args.save_npz)
-        print('FID: ', fid_value)
+    fid_value = calculate_fid(args.path,
+                              args.batch_size,
+                              device,
+                              args.dims,
+                              num_workers,
+                              args.num_imgs,
+                              args.save_npz)
+    print('FID: ', fid_value)
 
 
 if __name__ == '__main__':

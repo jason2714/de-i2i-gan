@@ -93,7 +93,7 @@ def main():
         for data_type in DATATYPE
     }
     val_samplers = {
-        data_type: RandomSampler(val_datasets[data_type], replacement=False, num_samples=NUM_SAMPLES[data_type])
+        data_type: RandomSampler(val_datasets[data_type], replacement=False, num_samples=opt.num_imgs)
         for data_type in DATATYPE
     }
     val_loaders = {

@@ -42,6 +42,14 @@ class DefectGanBaseOptions(BaseOptions):
         parser.add_argument('--init_variance', type=float, default=0.02,
                             help='variance of the initialization distribution')
 
+        # for inception model
+        parser.add_argument('--dims', type=int, default=2048,
+                            choices=list(InceptionV3.BLOCK_INDEX_BY_DIM),
+                            help=('Dimensionality of Inception features to use. '
+                                  'By default, uses pool3 features'))
+        parser.add_argument('--num_imgs', type=int, default=5_000, help='use # images to calculate FID score')
+        parser.add_argument('--npz_path', type=str, default=None, help='Paths to .npz statistic files')
+
         return parser
 
 
@@ -86,11 +94,7 @@ class TestOptions(DefectGanBaseOptions, BaseTestOptions):
         DefectGanBaseOptions.initialize(self, parser)
         BaseTestOptions.initialize(self, parser)
 
-        parser.add_argument('--dims', type=int, default=2048,
-                            choices=list(InceptionV3.BLOCK_INDEX_BY_DIM),
-                            help=('Dimensionality of Inception features to use. '
-                                  'By default, uses pool3 features'))
-        parser.add_argument('--num_imgs', type=int, default=50_000, help='use # images to calculate FID score')
-        parser.add_argument('--npz_path', type=str, required=True, help='Paths to .npz statistic files')
         # for testing
+        parser.add_argument('--npz_path', type=str, required=True, help='Paths to .npz statistic files')
+
         return parser

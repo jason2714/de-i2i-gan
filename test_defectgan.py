@@ -10,16 +10,17 @@ import math
 from tqdm import tqdm
 from models import create_model
 import numpy as np
-from metrics.fid_score import calculate_fid
 from metrics.inception import InceptionV3
 import torch
-from torch.nn.functional import adaptive_avg_pool2d
+from metrics.fid_score import calculate_fid_from_model
 
 DATATYPE = ["defects", "background"]
 
 from pathlib import Path
 import imageio
 import shutil
+
+
 def save_generated_images(opt, file_paths, fake_imgs):
     base_dir = opt.results_dir / opt.name / 'images'
     base_dir.mkdir(parents=True, exist_ok=True)
@@ -77,33 +78,9 @@ def main():
     # if opt.which_epoch == 'all':
     #     opt.ckpt_dir / opt.name
     model.load(opt.which_epoch)
-    for i in range(10, 400, 10):
-        model.load(i)
-        pred_arr = None
-        for df_data, df_labels, _ in tqdm(test_loaders['defects'], colour='MAGENTA'):
-            bg_data, bg_labels, file_paths = next(test_loaders['background'])
-            bg_data, bg_labels = bg_data[:df_data.size(0)], bg_labels[:df_data.size(0)]
-            fake_imgs = model('inference', bg_data, df_labels)
+    fid_value = calculate_fid_from_model(opt, model, inception_model, test_loaders, 'Testing... ')
+    print('FID: ', fid_value)
 
-            # save_generated_images(opt, file_paths, fake_imgs)
-
-            fake_imgs = (fake_imgs + 1) / 2
-            pred = inception_model(fake_imgs)[0]
-            # If model output is not scalar, apply global spatial average pooling.
-            # This happens if you choose a dimensionality not equal 2048.
-            if pred.size(2) != 1 or pred.size(3) != 1:
-                pred = adaptive_avg_pool2d(pred, output_size=(1, 1))
-            pred = pred.squeeze(3).squeeze(2).cpu().numpy()
-            if pred_arr is None:
-                pred_arr = pred
-            else:
-                pred_arr = np.concatenate((pred_arr, pred), axis=0)
-        mu = np.mean(pred_arr, axis=0)
-        sigma = np.cov(pred_arr, rowvar=False)
-        fid_value = calculate_fid((opt.npz_path, [mu, sigma]), opt.batch_size, opt.device, opt.dims,
-                                  num_workers=4, model=inception_model)
-
-        print('FID: ', fid_value)
 
 if __name__ == '__main__':
     main()
