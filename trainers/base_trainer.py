@@ -78,6 +78,7 @@ class BaseTrainer:
 
     def _create_scheduler(self, opt):
         sched_args = dict()
+        sched_args['last_epoch'] = self.first_epoch
         if opt.scheduler == 'step':
             sched_cls = optim.lr_scheduler.StepLR
             step_cnt = 4
