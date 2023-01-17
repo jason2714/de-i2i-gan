@@ -69,16 +69,16 @@ class BaseTrainer:
             optim_args['betas'] = (0.5, 0.999)
         else:
             raise NameError(f'optimizer named {opt.optimizer} not defined')
-        self.optimizers = {
-            network_name: optim_cls(network.parameters(),
-                                    lr=self.lr[network_name] if isinstance(self.lr, dict)
-                                    else self.lr, **optim_args)
-            for network_name, network in self.model.networks.items()
-        }
+        self.optimizers = {}
+        for network_name, network in self.model.networks.items():
+            if isinstance(self.lr, dict):
+                optim_args['lr'] = self.lr[network_name]
+            else:
+                optim_args['lr'] = self.lr
+            self.optimizers[network_name] = optim_cls(network.parameters(), **optim_args)
 
     def _create_scheduler(self, opt):
         sched_args = dict()
-        sched_args['last_epoch'] = self.first_epoch
         if opt.scheduler == 'step':
             sched_cls = optim.lr_scheduler.StepLR
             step_cnt = 4
@@ -97,3 +97,7 @@ class BaseTrainer:
             model_name: sched_cls(optimizer, **sched_args)
             for model_name, optimizer in self.optimizers.items()
         }
+        # initial lr
+        for _ in range(self.first_epoch):
+            for scheduler in self.schedulers.values():
+                scheduler.step()
