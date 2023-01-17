@@ -38,6 +38,8 @@ class BaseOptions:
         parser.add_argument('--init_variance', type=float, default=0.02,
                             help='variance of the initialization distribution')
         parser.add_argument('--use_spectral', action='store_true', help='whether to use spectral norm in conv block')
+        parser.add_argument('--which_epoch', type=str, default='latest',
+                            help='which epoch to load? set to latest to use latest cached model')
 
         # for generator
         # parser.add_argument('--netG', type=str, default='defectgan', help='selects model to use for netG (wgan)')
@@ -121,11 +123,11 @@ class BaseOptions:
             pickle.dump(opt, opt_file)
 
     def update_options_from_file(self, parser, opt):
-        new_opt = self.load_options(opt)
+        old_opt = self.load_options(opt)
         for k, v in sorted(vars(opt).items()):
-            if hasattr(new_opt, k) and v != getattr(new_opt, k):
-                new_val = getattr(new_opt, k)
-                parser.set_defaults(k=new_val)
+            if hasattr(old_opt, k) and v != getattr(old_opt, k):
+                new_val = getattr(old_opt, k)
+                parser.set_defaults(**{k: new_val})
         return parser
 
     def load_options(self, opt):

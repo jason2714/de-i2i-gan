@@ -31,8 +31,6 @@ class BaseTrainOptions:
         parser.add_argument('--num_critics', type=int, default=1,
                             help='number of discriminator iterations per generator iterations.')
         parser.add_argument('--continue_training', action='store_true', help='continue training: load the latest model')
-        parser.add_argument('--which_epoch', type=str, default='latest',
-                            help='which epoch to load? set to latest to use latest cached model')
 
         # for logging
         parser.add_argument('--log_dir', type=Path, default='./log', help='directory of tensorboard log')

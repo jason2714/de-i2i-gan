@@ -5,6 +5,7 @@ import torch
 from torch import optim
 
 from models import create_model
+import numpy as np
 
 
 class BaseTrainer:
@@ -16,16 +17,32 @@ class BaseTrainer:
 
     def __init__(self, opt, iters_per_epoch):
         self.opt = opt
+
+        # initial model
         self.model = create_model(opt)
         self.model.init_weights()
+        if opt.continue_training:
+            self.model.load('latest')
+
+        # initial losses and metrics
         self.losses = defaultdict(list)
         self.dis_outputs = defaultdict(list)
-        self.iters = 0
+        if opt.phase == 'val':
+            self.metrics = dict()
 
         # initial epochs and iters
+        self.iter_record_path = opt.ckpt_dir / opt.name / 'iter.txt'
+        self.first_epoch = 1
+        self.iters = 0
+        if opt.continue_training:
+            self.first_epoch, self.iters = np.loadtxt(self.iter_record_path, delimiter=',', dtype=int)
         if self.opt.num_epochs == -1:
             self.opt.num_epochs = math.ceil(self.opt.num_iters / (iters_per_epoch + 1e-12))
         self.opt.num_iters = self.opt.num_epochs * iters_per_epoch
+        assert self.first_epoch < self.opt.num_epochs, f'first_epoch {self.first_epoch} should not larger than ' \
+                                                       f'num_epochs {self.opt.num_epochs}'
+        assert self.iters < self.opt.num_iters, f'iters {self.iters} should not larger than ' \
+                                                f'num_iters {self.opt.num_iters}'
 
         # initial optimizer and scheduler
         self._init_lr(opt)

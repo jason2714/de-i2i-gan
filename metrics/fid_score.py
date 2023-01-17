@@ -112,7 +112,7 @@ def get_activations(files, model, batch_size=50, dims=2048, device='cpu',
         batch_size = len(files)
     image_size = 128
     fid_transforms = transforms.Compose([
-        transforms.Resize(image_size),
+        # transforms.Resize(image_size),
         transforms.RandomCrop((image_size, image_size), pad_if_needed=True),
         transforms.ToTensor()
     ])
@@ -262,7 +262,7 @@ def calculate_fid_from_model(opt, model, inception_model, data_loader, descripti
     # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
     for df_data, df_labels, _ in pbar:
         pbar.set_description(description)
-        bg_data, bg_labels, file_paths = next(data_loader['background'])
+        bg_data, bg_labels, _ = next(data_loader['background'])
         bg_data, bg_labels = bg_data[:df_data.size(0)], bg_labels[:df_data.size(0)]
         fake_imgs = model('inference', bg_data, df_labels)
         # save_generated_images(opt, file_paths, fake_imgs)

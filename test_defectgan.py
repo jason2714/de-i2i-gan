@@ -78,8 +78,10 @@ def main():
     # if opt.which_epoch == 'all':
     #     opt.ckpt_dir / opt.name
     model.load(opt.which_epoch)
-    fid_value = calculate_fid_from_model(opt, model, inception_model, test_loaders, 'Testing... ')
-    print('FID: ', fid_value)
+    for i in range(10, 401, 10):
+        model.load(i)
+        fid_value = calculate_fid_from_model(opt, model, inception_model, test_loaders, 'Testing... ')
+        print(f'FID: {fid_value} at epoch {i}')
 
 
 if __name__ == '__main__':

@@ -10,7 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 from metrics.fid_score import calculate_fid_from_model
 
 from trainers.base_trainer import BaseTrainer
-
+import numpy as np
 
 class DefectGanTrainer(BaseTrainer):
     def __init__(self, opt, iters_per_epoch=math.inf):
@@ -27,7 +27,6 @@ class DefectGanTrainer(BaseTrainer):
             block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[opt.dims]
             self.inception_model = InceptionV3([block_idx]).to(opt.device, non_blocking=True)
             self.inception_model.eval()
-            self.metrics = dict()
 
     def _init_lr(self, opt):
         assert len(opt.lr) in (1, 2), f'length of lr must be 1 or 2, not {len(opt.lr)}'
@@ -52,7 +51,10 @@ class DefectGanTrainer(BaseTrainer):
     def _generate_fake_grids(self, data_loader):
         generated_images = None
         bg_data, bg_labels, _ = next(data_loader['background'])
+        # TODO change normal to multi-labels, size not equal
+        _, df_labels, _ = next(iter(data_loader['defects']))
         labels = torch.eye(self.opt.label_nc)
+        labels[0, :] = df_labels[0]
         for data in bg_data:
             data = data.unsqueeze(0)
             fake_data = self.model('inference', data, labels)
@@ -83,7 +85,7 @@ class DefectGanTrainer(BaseTrainer):
         epoch start with 1, end with num_epochs
         """
         writer = SummaryWriter(self.opt.log_dir / self.opt.name)
-        for epoch in range(1, self.opt.num_epochs + 1):
+        for epoch in range(self.first_epoch, self.opt.num_epochs + 1):
             self._init_losses()
             self._train_epoch(train_loaders, epoch)
             self._write_tf_log(writer, epoch, val_loaders)
@@ -115,6 +117,7 @@ class DefectGanTrainer(BaseTrainer):
 
             if self.iters % self.opt.save_latest_freq == 0:
                 self.model.save('latest')
+                np.savetxt(self.iter_record_path, (epoch, self.iters), fmt='%i', delimiter=',')
             pbar.set_postfix(gan_D=f'{sum(self.losses["gan"]["D"]) / (len(self.losses["gan"]["D"]) + 1e-12):.4f}',
                              gan_G=f'{sum(self.losses["gan"]["G"]) / (len(self.losses["gan"]["G"]) + 1e-12):.4f}',
                              clf_D=f'{sum(self.losses["clf"]["D"]) / (len(self.losses["clf"]["D"]) + 1e-12):.4f}',

@@ -40,7 +40,7 @@ class BaseModel:
             network.init_weights(self.opt.init_type, self.opt.init_variance)
 
     def save(self, epoch):
-        print(f"save model's weights with epoch {epoch}")
+        # print(f"save model's weights with epoch {epoch}")
         for network_name, network in self.networks.items():
             save_network(network, network_name, epoch, self.opt)
 
