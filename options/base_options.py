@@ -84,7 +84,7 @@ class BaseOptions:
 
         # if there is opt_file, load it.
         # The previous default options will be overwritten
-        if opt.load_from_opt_file:
+        if opt.load_from_opt_file or (hasattr(opt, 'continue_training') and opt.continue_training):
             parser = self.update_options_from_file(parser, opt)
 
         opt = parser.parse_args()
