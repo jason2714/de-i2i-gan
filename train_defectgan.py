@@ -120,7 +120,7 @@ def main():
 if __name__ == '__main__':
     main()
     '''
-    python train_defectgan.py --data_dir A:/research/data --name org_lw_wo_resize --loss_weight 2 5 10 1 3 --npz_path A:/research/data/codebrim/val/defects00.npz --phase val
+    python train_defectgan.py --data_dir A:/research/data --name org_lw_fix --loss_weight 2 5 10 1 3 --npz_path A:/research/data/codebrim/val/defects00.npz --phase val --add_noise
     python train_defectgan.py --name org_lw_wo_resize --continue_training --load_from_opt_file
     tensorboard --logdir log\test_df --samples_per_plugin "images=100"
     '''

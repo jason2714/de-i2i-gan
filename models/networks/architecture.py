@@ -295,10 +295,10 @@ class NoiseInjection(nn.Module):
     def __init__(self, weight_type='constant', nc=None):
         super(NoiseInjection, self).__init__()
         if weight_type == 'constant':
-            self.weight = nn.Parameter(torch.zeros(1))
+            self.weight = nn.Parameter(torch.zeros(1, 1, 1, 1))
         elif weight_type == 'vector':
             assert nc is not None, "num_channel shouldn't be None"
-            self.weight = nn.Parameter(torch.zeros(nc))
+            self.weight = nn.Parameter(torch.zeros(1, nc, 1, 1))
         else:
             raise NameError(f'weight type named {weight_type} not defined')
 
@@ -306,7 +306,6 @@ class NoiseInjection(nn.Module):
         if noise is None:
             batch, _, height, width = image.shape
             noise = image.new_empty(batch, 1, height, width).normal_()
-        self.weight = torch.reshape(self.weight, (1, -1, 1, 1))
         return image + self.weight * noise
 
 # class UnetBlock(nn.Module):
