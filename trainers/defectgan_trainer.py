@@ -70,7 +70,7 @@ class DefectGanTrainer(BaseTrainer):
     def _write_tf_log(self, writer, epoch, val_loaders):
         # for losses
         for loss_type in self.loss_types:
-            writer.add_scalars(f'Losses/{loss_type}', {key: sum(value) / len(value)
+            writer.add_scalars(f'Losses/{loss_type}', {key: sum(value) / (len(value) + 1e-12)
                                                        for key, value in self.losses[loss_type].items()}, epoch)
         # for discriminator outputs
         # writer.add_scalars(f'D(x)', {key: sum(value) / len(value)

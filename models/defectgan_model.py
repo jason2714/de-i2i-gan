@@ -3,7 +3,6 @@ from models.networks.discriminator import DefectGanDiscriminator
 from models.base_model import BaseModel
 import torch
 import math
-from torch.nn.functional import binary_cross_entropy_with_logits, cross_entropy, l1_loss, mse_loss
 
 
 class DefectGanModel(BaseModel):
@@ -17,7 +16,8 @@ class DefectGanModel(BaseModel):
                                        num_res=opt.num_res,
                                        ngf=opt.ngf,
                                        use_spectral=opt.use_spectral,
-                                       add_noise=opt.add_noise).to(opt.device, non_blocking=True)
+                                       add_noise=opt.add_noise,
+                                       cycle_gan=opt.cycle_gan).to(opt.device, non_blocking=True)
         self.netD = DefectGanDiscriminator(label_nc=opt.label_nc,
                                            image_size=opt.image_size,
                                            input_nc=opt.input_nc,
@@ -62,12 +62,6 @@ class DefectGanModel(BaseModel):
         fake_defects_src, fake_defects_cls = self.netD(fake_defects)
         fake_normals_src, fake_normals_cls = self.netD(fake_normals)
 
-        # recover_defects_logits = self.netD(recover_defects)
-        # recover_normals_logits = self.netD(recover_normals)
-        #
-        # real_defects_logits = self.netD(df_data)
-        # real_normals_logits = self.netD(bg_data)
-
         # gan loss
         fake_labels = torch.ones_like(fake_defects_src, dtype=torch.float).to(self.netD.device, non_blocking=True)
         gan_loss = {'fake_defect': self._cal_loss(fake_defects_src, fake_labels, 'bce'),
@@ -83,21 +77,27 @@ class DefectGanModel(BaseModel):
         rec_loss = {'defect': self._cal_loss(recover_defects, df_data, 'l1'),
                     'normal': self._cal_loss(recover_normals, bg_data, 'l1')}
 
-        # sd_cyc loss
-        sd_cyc_loss = {'defect': self._cal_loss(df_prob, rec_df_prob, 'l1'),
-                       'normal': self._cal_loss(nm_prob, rec_nm_prob, 'l1')}
+        if self.opt.cycle_gan:
+            return torch.stack(list(gan_loss.values())).mean(), \
+                   torch.stack(list(clf_loss.values())).mean(), \
+                   torch.stack(list(rec_loss.values())).mean(), \
+                   torch.zeros([], requires_grad=False), \
+                   torch.zeros([], requires_grad=False)
+        else:
+            sd_cyc_loss = {'defect': self._cal_loss(df_prob, rec_df_prob, 'l1'),
+                           'normal': self._cal_loss(nm_prob, rec_nm_prob, 'l1')}
 
-        # sd_con loss
-        con_labels = torch.zeros_like(df_prob, dtype=torch.float).to(self.netG.device, non_blocking=True)
-        sd_con_loss = {'defect': self._cal_loss(df_prob, con_labels, 'l1'),
-                       'normal': self._cal_loss(nm_prob, con_labels, 'l1'),
-                       'rec_defect': self._cal_loss(rec_df_prob, con_labels, 'l1'),
-                       'rec_normal': self._cal_loss(rec_nm_prob, con_labels, 'l1')}
-        return torch.stack(list(gan_loss.values())).mean(), \
-               torch.stack(list(clf_loss.values())).mean(), \
-               torch.stack(list(rec_loss.values())).mean(), \
-               torch.stack(list(sd_cyc_loss.values())).mean(), \
-               torch.stack(list(sd_con_loss.values())).mean()
+            # sd_con loss
+            con_labels = torch.zeros_like(df_prob, dtype=torch.float).to(self.netG.device, non_blocking=True)
+            sd_con_loss = {'defect': self._cal_loss(df_prob, con_labels, 'l1'),
+                           'normal': self._cal_loss(nm_prob, con_labels, 'l1'),
+                           'rec_defect': self._cal_loss(rec_df_prob, con_labels, 'l1'),
+                           'rec_normal': self._cal_loss(rec_nm_prob, con_labels, 'l1')}
+            return torch.stack(list(gan_loss.values())).mean(), \
+                   torch.stack(list(clf_loss.values())).mean(), \
+                   torch.stack(list(rec_loss.values())).mean(), \
+                   torch.stack(list(sd_cyc_loss.values())).mean(), \
+                   torch.stack(list(sd_con_loss.values())).mean()
 
     def _compute_discriminator_loss(self, bg_data, df_labels, df_data):
         bg_data, df_labels, df_data = bg_data.to(self.netG.device, non_blocking=True), \
@@ -107,9 +107,9 @@ class DefectGanModel(BaseModel):
         seg = df_labels.reshape(*df_labels.size(), 1, 1)
         with torch.no_grad():
             # normal -> defect
-            fake_defects, df_prob = self.netG(bg_data, seg)
+            fake_defects, _ = self.netG(bg_data, seg)
             # defect -> normal
-            fake_normals, nm_prob = self.netG(df_data, -seg)
+            fake_normals, _ = self.netG(df_data, -seg)
 
         fake_defects.requires_grad = True
         fake_normals.requires_grad = True
@@ -134,7 +134,6 @@ class DefectGanModel(BaseModel):
         nm_labels[:, 0] = 1
         clf_loss = {'real_defect': self._cal_loss(real_defects_cls, df_labels, 'bce'),
                     'real_normal': self._cal_loss(real_normals_cls, nm_labels, 'bce')}
-        # exit()
         return torch.stack(list(gan_loss.values())).mean(), \
                torch.stack(list(clf_loss.values())).mean()
 
@@ -148,20 +147,3 @@ class DefectGanModel(BaseModel):
         # print(outputs.shape)
         # exit()
         return outputs
-
-    def _cal_loss(self, logits, targets, loss_type):
-        """Compute loss
-            input type for cce and bce is unnormalized logits"""
-        if loss_type in ('bce', 'bce_logits'):
-            # print(logits.size(), targets.size())
-            # print(logits[:4], targets[:4])
-            # print(binary_cross_entropy_with_logits(logits, targets))
-            return binary_cross_entropy_with_logits(logits, targets)
-        elif loss_type in ('cce', 'cce_logits'):
-            return cross_entropy(logits, targets)
-        elif loss_type == 'l1':
-            return l1_loss(logits, targets)
-        elif loss_type in ('l2', 'mse'):
-            return mse_loss(logits, targets)
-        else:
-            raise ValueError(f"loss_type: {loss_type} is invalid")

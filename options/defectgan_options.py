@@ -41,6 +41,7 @@ class DefectGanBaseOptions(BaseOptions):
                             help='network initialization [normal|xavier|kaiming|orthogonal]')
         parser.add_argument('--init_variance', type=float, default=0.02,
                             help='variance of the initialization distribution')
+        parser.add_argument('--cycle_gan', action='store_true', help='Whether to use cycleGAN architecture for training')
 
         # for inception model
         parser.add_argument('--dims', type=int, default=2048,

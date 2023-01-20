@@ -1,6 +1,7 @@
 import torch.nn
 from models.networks import save_network, load_network
 import inspect
+from torch.nn.functional import binary_cross_entropy_with_logits, cross_entropy, l1_loss, mse_loss
 
 
 class BaseModel:
@@ -55,3 +56,17 @@ class BaseModel:
             split_line = '=' * 50 + f'{self.network_prefix + network_name:^8}' + '=' * 50 + '\n'
             model_repr += split_line + repr(network) + '\n' + split_line
         return model_repr
+
+    def _cal_loss(self, logits, targets, loss_type):
+        """Compute loss
+            input type for cce and bce is unnormalized logits"""
+        if loss_type in ('bce', 'bce_logits'):
+            return binary_cross_entropy_with_logits(logits, targets)
+        elif loss_type in ('cce', 'cce_logits'):
+            return cross_entropy(logits, targets)
+        elif loss_type == 'l1':
+            return l1_loss(logits, targets)
+        elif loss_type in ('l2', 'mse'):
+            return mse_loss(logits, targets)
+        else:
+            raise ValueError(f"loss_type: {loss_type} is invalid")
