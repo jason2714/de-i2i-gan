@@ -29,7 +29,7 @@ class DefectGanBaseOptions(BaseOptions):
         parser.add_argument('--ngf', type=int, default=64, help='# of gen filters in last conv layer')
         parser.add_argument('--num_scales', type=int, default=2, help='# of gen scale layers')
         parser.add_argument('--num_res', type=int, default=6, help='# of gen resnet layers')
-        parser.add_argument('--add_noise', action='store_true', help='whether to add noise in generator')
+        parser.add_argument('--add_noise', action='store_true', default=False, help='whether to add noise in generator')
 
         # for discriminator
         # parser.add_argument('--netD', type=str, default='defectgan', help='selects model to use for netD (wgan)')
@@ -41,7 +41,9 @@ class DefectGanBaseOptions(BaseOptions):
                             help='network initialization [normal|xavier|kaiming|orthogonal]')
         parser.add_argument('--init_variance', type=float, default=0.02,
                             help='variance of the initialization distribution')
-        parser.add_argument('--cycle_gan', action='store_true', help='Whether to use cycleGAN architecture for training')
+        parser.add_argument('--cycle_gan', action='store_true', help='Whether to use cycleGAN architecture')
+        parser.add_argument('--skip_conn', action='store_true', help='Whether to use skip connection architecture')
+        parser.add_argument('--use_spectral', action='store_true', default=False, help='whether to use spectral norm in conv block')
 
         # for inception model
         parser.add_argument('--dims', type=int, default=2048,

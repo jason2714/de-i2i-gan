@@ -29,8 +29,9 @@ class BaseOptions:
         # for setting inputs
         parser.add_argument('--data_dir', type=Path, default='./data')
         parser.add_argument('--dataset_name', type=str, required=True, help='which dataset to use')
-        parser.add_argument('--load_from_opt_file', action='store_true',
-                            help='load the options from checkpoints and use that as default')
+        parser.add_argument('--load_from_opt_file', type=Path, default=None,
+                            help='load the options from checkpoints and use that as default, '
+                                 'ignore if continue_training is True')
 
         # for model
         parser.add_argument('--init_type', type=str, default='xavier',
@@ -106,7 +107,7 @@ class BaseOptions:
     def option_file_path(self, opt):
         expr_dir = opt.ckpt_dir / opt.name
         expr_dir.mkdir(parents=True, exist_ok=True)
-        file_name = expr_dir / 'opt'
+        file_name = expr_dir / 'opt.pkl'
         return file_name
 
     def save_options(self, opt):
@@ -125,14 +126,17 @@ class BaseOptions:
     def update_options_from_file(self, parser, opt):
         old_opt = self.load_options(opt)
         for k, v in sorted(vars(opt).items()):
-            if hasattr(old_opt, k) and v != getattr(old_opt, k):
+            if k != 'name' and hasattr(old_opt, k) and v != getattr(old_opt, k):
                 new_val = getattr(old_opt, k)
                 parser.set_defaults(**{k: new_val})
         return parser
 
     def load_options(self, opt):
-        file_path = self.option_file_path(opt)
-        new_opt = pickle.load(file_path.with_suffix('.pkl').open('rb'))
+        if hasattr(opt, 'continue_training') and opt.continue_training:
+            file_path = self.option_file_path(opt)
+        else:
+            file_path = opt.load_from_opt_file
+        new_opt = pickle.load(file_path.open('rb'))
         return new_opt
 
     def parse(self, save=False):
