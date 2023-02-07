@@ -68,7 +68,7 @@ class DeConvBlock(nn.Module):
                     blocks[idx] = spectral_norm(layer)
         self.de_conv_block = nn.Sequential(*blocks)
 
-    def forward(self, x):
+    def forward(self, x, seg=None):
         out = self.de_conv_block(x)
         return out
 
@@ -110,7 +110,7 @@ class ConvBlock(nn.Module):
 
         self.conv_block = nn.Sequential(*blocks)
 
-    def forward(self, x):
+    def forward(self, x, seg=None):
         out = self.conv_block(x)
         return out
 
@@ -151,7 +151,7 @@ class ResBlock(nn.Module):
                             use_spectral=use_spectral)]
         self.res_block = nn.Sequential(*blocks)
 
-    def forward(self, x):
+    def forward(self, x, seg=None):
         out = self.res_block(x)
         return out + x
 
@@ -237,14 +237,14 @@ class SPADEResBlock(nn.Module):
         return x_s
 
 
-class SPADEDeConvBlock(nn.Module):
+class SPADEConvBlock(nn.Module):
     def __init__(self, label_nc, f_in, f_out,
                  kernel_size=(3, 3),
                  stride=(1, 1),
                  padding=0,
                  padding_mode='zeros',
                  bias=False,
-                 up_scale=True,
+                 up_scale=False,
                  norm_layer=nn.InstanceNorm2d,
                  act_layer='relu',
                  use_spectral=False,
@@ -254,7 +254,7 @@ class SPADEDeConvBlock(nn.Module):
             valid_padding_modes = {'zeros', 'reflect', 'replicate', 'circular'}
             valid_activation_strings = {'leaky_relu', 'relu', 'sigmoid', 'tanh'}
         """
-        super(SPADEDeConvBlock, self).__init__()
+        super(SPADEConvBlock, self).__init__()
 
         # whether to up sample input image
         if up_scale:
@@ -269,7 +269,7 @@ class SPADEDeConvBlock(nn.Module):
             self.noise = nn.Identity()
 
         self.spade_norm = SPADE(label_nc, f_in,
-                                kernel_size=kernel_size,
+                                kernel_size=(3, 3),
                                 padding=padding,
                                 norm_layer=norm_layer)
         self.conv = nn.Conv2d(f_in, f_out,
@@ -287,7 +287,8 @@ class SPADEDeConvBlock(nn.Module):
 
     def forward(self, x, seg):
         x = self.up(x)
-        out = self.noise(self.conv(self.act(self.spade_norm(x, seg))))
+        x = self.spade_norm(x, seg)
+        out = self.noise(self.conv(self.act(x)))
         return out
 
 
@@ -308,92 +309,125 @@ class NoiseInjection(nn.Module):
             noise = image.new_empty(batch, 1, height, width).normal_()
         return image + self.weight * noise
 
-# class UnetBlock(nn.Module):
-#     """Defines the Unet submodule with skip connection.
-#         X -------------------identity----------------------
-#         |-- downsampling -- |submodule| -- upsampling --|
-#     """
-#
-#     def __init__(self, outer_nc, inner_nc, input_nc=None,
-#                  submodule=None, outermost=False, innermost=False, norm_layer=nn.BatchNorm2d, use_dropout=False):
-#         """Construct a Unet submodule with skip connections.
-#         Parameters:
-#             outer_nc (int) -- the number of filters in the outer conv layer
-#             inner_nc (int) -- the number of filters in the inner conv layer
-#             input_nc (int) -- the number of channels in input images/features
-#             submodule (UnetSkipConnectionBlock) -- previously defined submodules
-#             outermost (bool)    -- if this module is the outermost module
-#             innermost (bool)    -- if this module is the innermost module
-#             norm_layer          -- normalization layer
-#             use_dropout (bool)  -- if use dropout layers.
-#         """
-#         super(UnetBlock, self).__init__()
-#
-#         # ConvBlock(crt_dim, crt_dim * 2,
-#         #           kernel_size=(4, 4),
-#         #           stride=(2, 2),
-#         #           padding=1,
-#         #           padding_mode='reflect',
-#         #           norm_layer=nn.BatchNorm2d,
-#         #           act_layer='leaky_relu',
-#         #           use_spectral=use_spectral,
-#         #           add_noise=add_noise)
-#
-#         # SPADEResBlock(label_nc, crt_dim, crt_dim // 2,
-#         #               kernel_size=(3, 3),
-#         #               stride=(1, 1),
-#         #               padding='same',
-#         #               padding_mode='reflect',
-#         #               up_scale=True,
-#         #               norm_layer=nn.InstanceNorm2d,
-#         #               act_layer='relu',
-#         #               use_spectral=use_spectral,
-#         #               add_noise=add_noise)
-#
-#         self.outermost = outermost
-#         if type(norm_layer) == functools.partial:
-#             use_bias = norm_layer.func == nn.InstanceNorm2d
-#         else:
-#             use_bias = norm_layer == nn.InstanceNorm2d
-#         if input_nc is None:
-#             input_nc = outer_nc
-#         downconv = nn.Conv2d(input_nc, inner_nc, kernel_size=4,
-#                              stride=2, padding=1, bias=use_bias)
-#         downrelu = nn.LeakyReLU(0.2, True)
-#         downnorm = norm_layer(inner_nc)
-#         uprelu = nn.ReLU(True)
-#         upnorm = norm_layer(outer_nc)
-#
-#         if outermost:
-#             upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
-#                                         kernel_size=4, stride=2,
-#                                         padding=1)
-#             down = [downconv]
-#             up = [uprelu, upconv, nn.Tanh()]
-#             model = down + [submodule] + up
-#         elif innermost:
-#             upconv = nn.ConvTranspose2d(inner_nc, outer_nc,
-#                                         kernel_size=4, stride=2,
-#                                         padding=1, bias=use_bias)
-#             down = [downrelu, downconv]
-#             up = [uprelu, upconv, upnorm]
-#             model = down + up
-#         else:
-#             upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
-#                                         kernel_size=4, stride=2,
-#                                         padding=1, bias=use_bias)
-#             down = [downrelu, downconv, downnorm]
-#             up = [uprelu, upconv, upnorm]
-#
-#             if use_dropout:
-#                 model = down + [submodule] + up + [nn.Dropout(0.5)]
-#             else:
-#                 model = down + [submodule] + up
-#
-#         self.model = nn.Sequential(*model)
-#
-#     def forward(self, x):
-#         if self.outermost:
-#             return self.model(x)
-#         else:   # add skip connections
-#             return torch.cat([x, self.model(x)], 1)
+
+class UnetBlock(nn.Module):
+    """Defines the Unet submodule with skip connection.
+        X -------------------identity----------------------
+        |-- downsampling -- |submodule| -- upsampling --|
+    """
+
+    def __init__(self, label_nc, crt_dim,
+                 submodule=None,
+                 skip_conn=False,
+                 innermost=False,
+                 kernel_sizes=((4, 4), (3, 3)),
+                 strides=((2, 2), (1, 1)),
+                 paddings=(1, 1),
+                 padding_mode='zeros',
+                 bias=False,
+                 norm_layers=(nn.BatchNorm2d, nn.InstanceNorm2d),
+                 act_layers=('leaky_relu', 'relu'),
+                 use_spectral=False,
+                 add_noise=False):
+        """Construct a Unet submodule with skip connections.
+        Parameters:
+            crt_dim (int) -- the number of channels in input images/features
+            submodule (UnetSkipConnectionBlock) -- previously defined submodules
+            norm_layer          -- normalization layer
+        """
+        super(UnetBlock, self).__init__()
+
+        self.skip_conn = skip_conn
+        self.down_conv = ConvBlock(crt_dim, crt_dim * 2,
+                                   kernel_size=kernel_sizes[0],
+                                   stride=strides[0],
+                                   padding=paddings[0],
+                                   padding_mode=padding_mode,
+                                   bias=bias,
+                                   norm_layer=norm_layers[0],
+                                   act_layer=act_layers[0],
+                                   use_spectral=use_spectral)
+        # conv_blk.append(SPADEConvBlock(label_nc, crt_dim, crt_dim * 2,
+        #                                kernel_size=(4, 4),
+        #                                stride=(2, 2),
+        #                                padding=1,
+        #                                padding_mode='reflect',
+        #                                up_scale=False,
+        #                                norm_layer=nn.BatchNorm2d,
+        #                                act_layer='leaky_relu',
+        #                                use_spectral=use_spectral,
+        #                                add_noise=add_noise))
+
+        if innermost or not skip_conn:
+            inner_dim = crt_dim * 2
+        else:
+            inner_dim = crt_dim * 4
+        self.up_conv = SPADEConvBlock(label_nc, inner_dim, crt_dim,
+                                      kernel_size=kernel_sizes[1],
+                                      stride=strides[1],
+                                      padding=paddings[1],
+                                      padding_mode=padding_mode,
+                                      up_scale=True,
+                                      norm_layer=norm_layers[1],
+                                      act_layer=act_layers[1],
+                                      use_spectral=use_spectral,
+                                      add_noise=add_noise)
+        self.submodule = submodule
+
+    def forward(self, x, seg):
+        # TODO fix the problem of Sequential with two args
+        feat = self.down_conv(x, seg)
+        if self.submodule is not None:
+            feat = self.submodule(feat, seg)
+        out = self.up_conv(feat, seg)
+        if self.skip_conn:  # add skip connections
+            return torch.cat([x, out], 1)
+        else:
+            return out
+
+
+class ResnetSubModule(nn.Module):
+    def __init__(self, label_nc, crt_dim, num_res=6, use_spectral=True, add_noise=True):
+        super().__init__()
+        enc_res_blk = []
+        dec_res_blk = []
+        for i in range(num_res // 2):
+            enc_res_blk.append(ResBlock(crt_dim, crt_dim,
+                                        kernel_size=(3, 3),
+                                        stride=(1, 1),
+                                        padding='same',
+                                        padding_mode='reflect',
+                                        norm_layer=nn.BatchNorm2d,
+                                        act_layer='leaky_relu',
+                                        use_spectral=use_spectral))
+            # enc_res_blk.append(SPADEResBlock(label_nc, crt_dim, crt_dim,
+            #                                  kernel_size=(3, 3),
+            #                                  stride=(1, 1),
+            #                                  padding='same',
+            #                                  padding_mode='reflect',
+            #                                  up_scale=False,
+            #                                  norm_layer=nn.BatchNorm2d,
+            #                                  act_layer='leaky_relu',
+            #                                  use_spectral=use_spectral,
+            #                                  add_noise=add_noise))
+        # decoder
+        for i in range(num_res // 2, num_res):
+            dec_res_blk.append(SPADEResBlock(label_nc, crt_dim, crt_dim,
+                                             kernel_size=(3, 3),
+                                             stride=(1, 1),
+                                             padding='same',
+                                             padding_mode='reflect',
+                                             up_scale=False,
+                                             norm_layer=nn.InstanceNorm2d,
+                                             act_layer='relu',
+                                             use_spectral=use_spectral,
+                                             add_noise=add_noise))
+        self.enc_res_blk = nn.Sequential(*enc_res_blk)
+        self.dec_res_blk = nn.Sequential(*dec_res_blk)
+
+    def forward(self, feat, seg):
+        for enc_res_blk in self.enc_res_blk:
+            feat = enc_res_blk(feat, seg)
+        for dec_res_blk in self.dec_res_blk:
+            feat = dec_res_blk(feat, seg)
+        return feat

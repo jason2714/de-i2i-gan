@@ -12,6 +12,7 @@ from metrics.fid_score import calculate_fid_from_model
 from trainers.base_trainer import BaseTrainer
 import numpy as np
 
+
 class DefectGanTrainer(BaseTrainer):
     def __init__(self, opt, iters_per_epoch=math.inf):
         super().__init__(opt, iters_per_epoch)
@@ -57,7 +58,7 @@ class DefectGanTrainer(BaseTrainer):
         labels[0, :] = df_labels[0]
         for data in bg_data:
             data = data.unsqueeze(0)
-            fake_data = self.model('inference', data, labels)
+            fake_data = self.model('inference', data.expand(labels.size(0), -1, -1, -1), labels)
             data = data / 2 + 0.5
             fake_data = (fake_data / 2 + 0.5).detach().cpu()
             if generated_images is None:

@@ -17,7 +17,8 @@ class DefectGanModel(BaseModel):
                                        ngf=opt.ngf,
                                        use_spectral=opt.use_spectral,
                                        add_noise=opt.add_noise,
-                                       cycle_gan=opt.cycle_gan).to(opt.device, non_blocking=True)
+                                       cycle_gan=opt.cycle_gan,
+                                       skip_conn=opt.skip_conn).to(opt.device, non_blocking=True)
         self.netD = DefectGanDiscriminator(label_nc=opt.label_nc,
                                            image_size=opt.image_size,
                                            input_nc=opt.input_nc,
