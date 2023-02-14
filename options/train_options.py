@@ -10,7 +10,9 @@ class BaseTrainOptions:
         # for displays
         parser.add_argument('--num_display_images', type=int, default=64,
                             help='# of display images')
-        parser.add_argument('--save_epoch_freq', type=int, default=10,
+        parser.add_argument('--save_img_freq', type=int, default=4,
+                            help='frequency of saving generated images at the end of epochs')
+        parser.add_argument('--save_ckpt_freq', type=int, default=10,
                             help='frequency of saving checkpoints at the end of epochs')
         parser.add_argument('--save_latest_freq', type=int, default=1000,
                             help='frequency of saving latest checkpoints at the end of iters')

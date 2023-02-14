@@ -50,23 +50,36 @@ class DefectGanTrainer(BaseTrainer):
 
     @torch.no_grad()
     def _generate_fake_grids(self, data_loader):
-        generated_images = None
+        df_images = None
+        nm_images = None
+        df_prob_images = None
+        mtp_df_images = None
+        init_flag = True
         bg_data, bg_labels, _ = next(data_loader['background'])
-        # TODO change normal to multi-labels, size not equal
         _, df_labels, _ = next(iter(data_loader['defects']))
-        labels = torch.eye(self.opt.label_nc)
-        labels[0, :] = df_labels[0]
+        labels = torch.cat([torch.eye(self.opt.label_nc)[1:], df_labels], dim=0)
         for data in bg_data:
             data = data.unsqueeze(0)
-            fake_data = self.model('inference', data.expand(labels.size(0), -1, -1, -1), labels)
+            df_data, df_prob = self.model('inference', data.expand(labels.size(0), -1, -1, -1), labels)
+            nm_data, nm_prob = self.model('inference', df_data, -labels)
             data = data / 2 + 0.5
-            fake_data = (fake_data / 2 + 0.5).detach().cpu()
-            if generated_images is None:
-                generated_images = torch.cat((data, fake_data), dim=0)
+            df_data = (df_data / 2 + 0.5).detach().cpu()
+            if init_flag:
+                df_images = torch.cat((data, df_data[:self.opt.label_nc - 1]), dim=0)
+                nm_images = torch.cat((data, nm_data[:self.opt.label_nc - 1]), dim=0)
+                df_prob_images = torch.cat((data, df_prob[:self.opt.label_nc - 1]), dim=0)
+                mtp_df_images = torch.cat((data, df_prob[self.opt.label_nc - 1:]), dim=0)
+                init_flag = False
             else:
-                generated_images = torch.cat((generated_images, data, fake_data), dim=0)
-        image_grid = make_grid(generated_images, nrow=(self.opt.label_nc + 1))
-        return image_grid
+                df_images = torch.cat((df_images, data, df_data[:self.opt.label_nc - 1]), dim=0)
+                nm_images = torch.cat((nm_images, data, nm_data[:self.opt.label_nc - 1]), dim=0)
+                df_prob_images = torch.cat((df_prob_images, data, df_prob[:self.opt.label_nc - 1]), dim=0)
+                mtp_df_images = torch.cat((mtp_df_images, data, df_prob[self.opt.label_nc - 1:]), dim=0)
+        df_grid = make_grid(df_images, nrow=self.opt.label_nc)
+        nm_grid = make_grid(nm_images, nrow=self.opt.label_nc)
+        df_prob_grid = make_grid(df_prob_images, nrow=self.opt.label_nc)
+        mtp_df_grid = make_grid(mtp_df_images, nrow=(self.opt.num_imgs + 1))
+        return df_grid, nm_grid, df_prob_grid, mtp_df_grid
 
     def _write_tf_log(self, writer, epoch, val_loaders):
         # for losses
@@ -78,8 +91,12 @@ class DefectGanTrainer(BaseTrainer):
         #                              for key, value in self.losses.items()
         #                              if key.startswith('gan_')}, epoch)
         # for generated image
-        image_grid = self._generate_fake_grids(val_loaders)
-        writer.add_image('Generated Image', image_grid, epoch)
+        if epoch % self.opt.save_img_freq == 0:
+            df_grid, nm_grid, df_prob_grid, mtp_df_grid = self._generate_fake_grids(val_loaders)
+            writer.add_image('Images/Single Defect', df_grid, epoch)
+            writer.add_image('Images/Single Normal', nm_grid, epoch)
+            writer.add_image('Images/Single Defect Distribution', df_prob_grid, epoch)
+            writer.add_image('Images/Multiple Defects', mtp_df_grid, epoch)
 
     def train(self, train_loaders, val_loaders=None):
         """
@@ -90,7 +107,7 @@ class DefectGanTrainer(BaseTrainer):
             self._init_losses()
             self._train_epoch(train_loaders, epoch)
             self._write_tf_log(writer, epoch, val_loaders)
-            if epoch % self.opt.save_epoch_freq == 0:
+            if epoch % self.opt.save_ckpt_freq == 0:
                 self.model.save(epoch)
                 if self.opt.phase == 'val':
                     self._val_epoch(val_loaders, epoch)

@@ -142,9 +142,4 @@ class DefectGanModel(BaseModel):
     def _generate_fake(self, data, labels):
         data, labels = data.to(self.netG.device), labels.to(self.netG.device, non_blocking=True)
         seg = labels.reshape(*labels.size(), 1, 1)
-        # print(data.shape)
-        # print(seg.shape)
-        outputs, _ = self.netG(data, seg)
-        # print(outputs.shape)
-        # exit()
-        return outputs
+        return self.netG(data, seg)

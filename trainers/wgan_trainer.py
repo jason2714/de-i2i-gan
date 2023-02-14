@@ -77,7 +77,7 @@ class WGanTrainer(BaseTrainer):
             if val_loader is not None:
                 self._val_epoch(val_loader)
             self._write_tf_log(writer, epoch)
-            if epoch % self.opt.save_epoch_freq == 0:
+            if epoch % self.opt.save_ckpt_freq == 0:
                 self.model.save(epoch)
         writer.close()
 
