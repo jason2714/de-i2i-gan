@@ -11,6 +11,7 @@ from metrics.fid_score import calculate_fid_from_model
 
 from trainers.base_trainer import BaseTrainer
 import numpy as np
+import cv2
 
 
 class DefectGanTrainer(BaseTrainer):
@@ -50,36 +51,44 @@ class DefectGanTrainer(BaseTrainer):
 
     @torch.no_grad()
     def _generate_fake_grids(self, data_loader):
-        df_images = None
         nm_images = None
-        df_prob_images = None
-        mtp_df_images = None
+        single_df_images = []
+        multi_df_images = None
         init_flag = True
         bg_data, bg_labels, _ = next(data_loader['background'])
         _, df_labels, _ = next(iter(data_loader['defects']))
         labels = torch.cat([torch.eye(self.opt.label_nc)[1:], df_labels], dim=0)
         for data in bg_data:
-            data = data.unsqueeze(0)
+            single_df_images.append(data / 2 + 0.5)
+            data = data.unsqueeze(0).to(self.model.netG.device)
             df_data, df_prob = self.model('inference', data.expand(labels.size(0), -1, -1, -1), labels)
-            nm_data, nm_prob = self.model('inference', df_data, -labels)
-            data = data / 2 + 0.5
+            foreground = torch.clamp((df_data - data * (1 - df_prob)) / (df_prob + 1e-8), min=-1, max=1)
+            # print(torch.min(foreground), torch.max(foreground))
             df_data = (df_data / 2 + 0.5).detach().cpu()
+            foreground = (foreground / 2 + 0.5).detach().cpu()
+            for idx, (slice_data, slice_prob, slice_foreground) in enumerate(zip(df_data, df_prob, foreground)):
+                if idx == self.opt.label_nc - 1:
+                    break
+                slice_prob = slice_prob.squeeze(0).detach().cpu()
+                # print(torch.min(slice_prob), torch.max(slice_prob))
+                heatmap = cv2.cvtColor(cv2.applyColorMap(np.uint8(255 * slice_prob), cv2.COLORMAP_JET), cv2.COLOR_BGR2RGB)
+                heatmap = torch.from_numpy(heatmap.transpose(2, 0, 1)) / 255.
+                # print(torch.min(heatmap), torch.max(heatmap))
+                single_df_images += [slice_data, heatmap, slice_foreground]
+            # nm_data, nm_prob = self.model('inference', df_data, -labels)
+            data = (data / 2 + 0.5).cpu()
             if init_flag:
-                df_images = torch.cat((data, df_data[:self.opt.label_nc - 1]), dim=0)
-                nm_images = torch.cat((data, nm_data[:self.opt.label_nc - 1]), dim=0)
-                df_prob_images = torch.cat((data, df_prob[:self.opt.label_nc - 1]), dim=0)
-                mtp_df_images = torch.cat((data, df_prob[self.opt.label_nc - 1:]), dim=0)
+                # nm_images = torch.cat((data, nm_data[:self.opt.label_nc - 1]), dim=0)
+                multi_df_images = torch.cat((data, df_data[self.opt.label_nc - 1:]), dim=0)
                 init_flag = False
             else:
-                df_images = torch.cat((df_images, data, df_data[:self.opt.label_nc - 1]), dim=0)
-                nm_images = torch.cat((nm_images, data, nm_data[:self.opt.label_nc - 1]), dim=0)
-                df_prob_images = torch.cat((df_prob_images, data, df_prob[:self.opt.label_nc - 1]), dim=0)
-                mtp_df_images = torch.cat((mtp_df_images, data, df_prob[self.opt.label_nc - 1:]), dim=0)
-        df_grid = make_grid(df_images, nrow=self.opt.label_nc)
-        nm_grid = make_grid(nm_images, nrow=self.opt.label_nc)
-        df_prob_grid = make_grid(df_prob_images, nrow=self.opt.label_nc)
-        mtp_df_grid = make_grid(mtp_df_images, nrow=(self.opt.num_imgs + 1))
-        return df_grid, nm_grid, df_prob_grid, mtp_df_grid
+                # nm_images = torch.cat((nm_images, data, nm_data[:self.opt.label_nc - 1]), dim=0)
+                multi_df_images = torch.cat((multi_df_images, data, df_data[self.opt.label_nc - 1:]), dim=0)
+        single_df_images = torch.stack(single_df_images, dim=0)
+        df_grid = make_grid(single_df_images, nrow=((self.opt.label_nc - 1) * 3 + 1))
+        # nm_grid = make_grid(nm_images, nrow=self.opt.label_nc)
+        mtp_df_grid = make_grid(multi_df_images, nrow=(self.opt.num_display_images + 1))
+        return df_grid, mtp_df_grid
 
     def _write_tf_log(self, writer, epoch, val_loaders):
         # for losses
@@ -92,10 +101,10 @@ class DefectGanTrainer(BaseTrainer):
         #                              if key.startswith('gan_')}, epoch)
         # for generated image
         if epoch % self.opt.save_img_freq == 0:
-            df_grid, nm_grid, df_prob_grid, mtp_df_grid = self._generate_fake_grids(val_loaders)
+            df_grid, mtp_df_grid = self._generate_fake_grids(val_loaders)
             writer.add_image('Images/Single Defect', df_grid, epoch)
-            writer.add_image('Images/Single Normal', nm_grid, epoch)
-            writer.add_image('Images/Single Defect Distribution', df_prob_grid, epoch)
+            # writer.add_image('Images/Single Normal', nm_grid, epoch)
+            # writer.add_image('Images/Single Defect Distribution', df_prob_grid, epoch)
             writer.add_image('Images/Multiple Defects', mtp_df_grid, epoch)
 
     def train(self, train_loaders, val_loaders=None):

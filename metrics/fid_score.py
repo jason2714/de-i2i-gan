@@ -264,7 +264,7 @@ def calculate_fid_from_model(opt, model, inception_model, data_loader, descripti
         pbar.set_description(description)
         bg_data, bg_labels, _ = next(data_loader['background'])
         bg_data, bg_labels = bg_data[:df_data.size(0)], bg_labels[:df_data.size(0)]
-        fake_imgs = model('inference', bg_data, df_labels)
+        fake_imgs, _ = model('inference', bg_data, df_labels)
         # save_generated_images(opt, file_paths, fake_imgs)
         fake_imgs = (fake_imgs + 1) / 2
         pred = inception_model(fake_imgs)[0]
