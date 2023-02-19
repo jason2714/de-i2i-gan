@@ -75,13 +75,9 @@ def main():
     # must use model.eval() to ignore dropout and batchNorm, otherwise the value will break
     inception_model.eval()
 
-    # if opt.which_epoch == 'all':
-    #     opt.ckpt_dir / opt.name
     model.load(opt.which_epoch)
-    for i in range(10, 401, 10):
-        model.load(i)
-        fid_value = calculate_fid_from_model(opt, model, inception_model, test_loaders, 'Testing... ')
-        print(f'FID: {fid_value} at epoch {i}')
+    fid_value = calculate_fid_from_model(opt, model, inception_model, test_loaders, 'Testing... ')
+    print(f'FID: {fid_value} at epoch {opt.which_epoch}')
 
 
 if __name__ == '__main__':

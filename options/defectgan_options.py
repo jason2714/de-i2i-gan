@@ -69,6 +69,8 @@ class TrainOptions(DefectGanBaseOptions, BaseTrainOptions):
         # for displays
         parser.add_argument('--num_display_images', type=int, default=8,
                             help='# of display images')
+        parser.add_argument('--save_img_freq', type=int, default=4,
+                            help='frequency of saving generated images at the end of epochs')
         # for training
         parser.add_argument('--optimizer', type=str, default='adam',
                             help='type of optimizer [sgd|rmsprop|adam|adamw]')
