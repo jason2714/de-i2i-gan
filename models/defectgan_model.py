@@ -50,7 +50,7 @@ class DefectGanModel(BaseModel):
             self.netG.eval()
             return self._generate_fake_grids(data, labels)
         else:
-            raise ValueError("|mode| is invalid")
+            raise ValueError(f"|mode {mode}| is invalid")
 
     def _compute_generator_loss(self, bg_data, df_labels, df_data):
         bg_data, df_labels, df_data = bg_data.to(self.netG.device, non_blocking=True), \
@@ -148,16 +148,20 @@ class DefectGanModel(BaseModel):
     @torch.no_grad()
     def _generate_fake(self, data, labels):
         data, labels = data.to(self.netG.device), labels.to(self.netG.device, non_blocking=True)
-        seg = labels.reshape(*labels.size(), 1, 1)
+        if len(labels.size()) == 2:
+            seg = labels.reshape(labels.size(0), labels.size(1), 1, 1)
+        elif len(labels.size()) == 4:
+            seg = labels
+        else:
+            raise ValueError(f"|labels dim {len(labels.size())}| is invalid")
         return self.netG(data, seg)
 
     @torch.no_grad()
-    def _generate_fake_grids(self, bg_data, df_labels):
+    def _generate_fake_grids(self, bg_data, labels):
         nm_images = None
         single_df_images = []
         multi_df_images = None
         init_flag = True
-        labels = torch.cat([torch.eye(self.opt.label_nc)[1:], df_labels], dim=0)
         for data in bg_data:
             single_df_images.append(data / 2 + 0.5)
             data = data.unsqueeze(0).to(self.netG.device)

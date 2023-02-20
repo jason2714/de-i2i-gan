@@ -78,6 +78,7 @@ def main():
     model.load(opt.which_epoch)
     fid_value = calculate_fid_from_model(opt, model, inception_model, test_loaders, 'Testing... ')
     print(f'FID: {fid_value} at epoch {opt.which_epoch}')
+    # TODO build test labels
 
 
 if __name__ == '__main__':
