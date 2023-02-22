@@ -43,7 +43,8 @@ class DefectGanBaseOptions(BaseOptions):
                             help='variance of the initialization distribution')
         parser.add_argument('--cycle_gan', action='store_true', help='Whether to use cycleGAN architecture')
         parser.add_argument('--skip_conn', action='store_true', help='Whether to use skip connection architecture')
-        parser.add_argument('--use_spectral', action='store_true', default=False, help='whether to use spectral norm in conv block')
+        parser.add_argument('--use_spectral', action='store_true', default=False,
+                            help='whether to use spectral norm in conv block')
 
         # for inception model
         parser.add_argument('--dims', type=int, default=2048,
@@ -100,6 +101,11 @@ class TestOptions(DefectGanBaseOptions, BaseTestOptions):
         BaseTestOptions.initialize(self, parser)
 
         # for testing
-        parser.add_argument('--npz_path', type=str, required=True, help='Paths to .npz statistic files')
+        parser.add_argument('--npz_path', type=str, default=None,
+                            help='Paths to .npz statistic files (required if cal_fid is True)')
+        parser.add_argument('--cal_fid', action='store_true', default=False,
+                            help='whether to calculate FID score or not')
+        parser.add_argument('--save_img_grid', action='store_true', default=False,
+                            help='whether to save generated image grids or not')
 
         return parser

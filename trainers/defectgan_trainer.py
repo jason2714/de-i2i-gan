@@ -61,8 +61,9 @@ class DefectGanTrainer(BaseTrainer):
         if epoch % self.opt.save_img_freq == 0:
             bg_data, _, _ = next(val_loaders['background'])
             _, df_labels, _ = next(iter(val_loaders['defects']))
-            labels = torch.cat([torch.eye(self.opt.label_nc)[1:], df_labels], dim=0)
-            df_grid, mtp_df_grid = self.model('generate_grid', bg_data, labels)
+            labels = torch.eye(self.opt.label_nc)[1:]
+            df_grid = self.model('generate_grid', bg_data, labels)
+            mtp_df_grid = self.model('generate_grid', bg_data, df_labels, img_only=True)
             writer.add_image('Images/Single Defect', df_grid, epoch)
             # writer.add_image('Images/Single Normal', nm_grid, epoch)
             # writer.add_image('Images/Single Defect Distribution', df_prob_grid, epoch)
