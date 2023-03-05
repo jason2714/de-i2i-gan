@@ -79,18 +79,28 @@ def main():
         fid_value = calculate_fid_from_model(opt, model, inception_model, test_loaders, 'Testing... ')
         print(f'FID: {fid_value} at epoch {opt.which_epoch}')
     if opt.save_img_grid:
+
+        import json
+        anno_dir = opt.data_dir / opt.dataset_name / 'metadata'
+        label2idx_path = anno_dir / 'label2idx.json'
+        label2idx = json.loads(label2idx_path.read_text())
+        idx2label = {idx: label for label, idx in label2idx.items()}
+
         output_dir = opt.results_dir / opt.name / 'images'
         output_dir.mkdir(parents=True, exist_ok=True)
         bg_data, _, _ = next(test_loaders['background'])
         # _, df_labels, _ = next(iter(test_loaders['defects']))
         num_grids = 2
-        for label_idx in opt.label_nc:
+        for label_idx in range(1, opt.label_nc):
             grid_labels = torch.zeros(num_grids * num_grids, opt.label_nc, num_grids, num_grids)
             for grid_row in range(num_grids):
                 for grid_col in range(num_grids):
                     grid_labels[grid_row * num_grids + grid_col, label_idx, grid_row, grid_col] = 1
+            org_label = torch.zeros(1, opt.label_nc, num_grids, num_grids)
+            org_label[0, label_idx] = 1
+            grid_labels = torch.cat((org_label, grid_labels))
             df_grid = model('generate_grid', bg_data, grid_labels)
-            output_path = output_dir / f'{label_idx}.png'
+            output_path = output_dir / f'{idx2label[label_idx]}.png'
             save_image(df_grid, output_path)
 
 
