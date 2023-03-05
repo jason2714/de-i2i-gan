@@ -29,7 +29,7 @@ class DefectGanModel(BaseModel):
                                            ndf=opt.ndf,
                                            use_spectral=opt.use_spectral).to(opt.device, non_blocking=True)
 
-    def __call__(self, mode, data, labels, df_data=None):
+    def __call__(self, mode, data, labels, df_data=None, img_only=False):
         if mode == 'generator':
             self.netD.eval()
             self.netG.train()
@@ -48,7 +48,7 @@ class DefectGanModel(BaseModel):
         elif mode == 'generate_grid':
             self.netD.eval()
             self.netG.eval()
-            return self._generate_fake_grids(data, labels)
+            return self._generate_fake_grids(data, labels, img_only)
         else:
             raise ValueError(f"|mode {mode}| is invalid")
 

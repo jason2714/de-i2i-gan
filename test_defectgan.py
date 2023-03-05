@@ -78,8 +78,8 @@ def main():
 
         fid_value = calculate_fid_from_model(opt, model, inception_model, test_loaders, 'Testing... ')
         print(f'FID: {fid_value} at epoch {opt.which_epoch}')
-    if opt.save_img_grid:
 
+    if opt.save_img_grid:
         import json
         anno_dir = opt.data_dir / opt.dataset_name / 'metadata'
         label2idx_path = anno_dir / 'label2idx.json'

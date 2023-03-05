@@ -69,6 +69,25 @@ class DefectGanTrainer(BaseTrainer):
             # writer.add_image('Images/Single Defect Distribution', df_prob_grid, epoch)
             writer.add_image('Images/Multiple Defects', mtp_df_grid, epoch)
 
+    def pretrain(self, train_loaders, val_loaders=None):
+        """
+        epoch start with 1, end with num_epochs
+        """
+        # TODO
+        # writer = SummaryWriter(self.opt.log_dir / self.opt.name / 'pretrain')
+        # for epoch in range(self.first_epoch, self.opt.num_epochs + 1):
+        #     self._init_losses()
+        #     self._train_epoch(train_loaders, epoch)
+        #     self._write_tf_log(writer, epoch, val_loaders)
+        #     if epoch % self.opt.save_ckpt_freq == 0:
+        #         self.model.save(epoch)
+        #         if self.opt.phase == 'val':
+        #             self._val_epoch(val_loaders, epoch)
+        #             for metric in self.metrics:
+        #                 writer.add_scalar(f'Metrics/{metric}', self.metrics[metric], epoch)
+        # writer.close()
+
+
     def train(self, train_loaders, val_loaders=None):
         """
         epoch start with 1, end with num_epochs
