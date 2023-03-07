@@ -66,7 +66,7 @@ class BaseTrainer:
             optim_args['betas'] = (0.5, 0.999)
         elif opt.optimizer == 'adamw':
             optim_cls = optim.AdamW
-            optim_args['betas'] = (0.5, 0.999)
+            optim_args['betas'] = (0.9, 0.95)
         else:
             raise NameError(f'optimizer named {opt.optimizer} not defined')
         self.optimizers = {}
@@ -78,7 +78,7 @@ class BaseTrainer:
             self.optimizers[network_name] = optim_cls(network.parameters(), **optim_args)
 
     def _create_scheduler(self, opt):
-        sched_args = dict()
+        sched_args = dict(verbose=True)
         if opt.scheduler == 'step':
             sched_cls = optim.lr_scheduler.StepLR
             step_cnt = 4

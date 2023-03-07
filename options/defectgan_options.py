@@ -52,7 +52,8 @@ class DefectGanBaseOptions(BaseOptions):
                             help=('Dimensionality of Inception features to use. '
                                   'By default, uses pool3 features'))
         parser.add_argument('--num_imgs', type=int, default=5_000, help='use # images to calculate FID score')
-        parser.add_argument('--npz_path', type=str, default=None, help='Paths to .npz statistic files')
+        parser.add_argument('--npz_path', type=str, default=None,
+                            help='Paths to .npz statistic files (required if cal_fid is True)')
 
         return parser
 
@@ -101,11 +102,51 @@ class TestOptions(DefectGanBaseOptions, BaseTestOptions):
         BaseTestOptions.initialize(self, parser)
 
         # for testing
-        parser.add_argument('--npz_path', type=str, default=None,
-                            help='Paths to .npz statistic files (required if cal_fid is True)')
         parser.add_argument('--cal_fid', action='store_true', default=False,
                             help='whether to calculate FID score or not')
         parser.add_argument('--save_img_grid', action='store_true', default=False,
                             help='whether to save generated image grids or not')
+
+        return parser
+
+
+class PreTrainOptions(DefectGanBaseOptions, BaseTrainOptions):
+    def __init__(self):
+        super(PreTrainOptions, self).__init__()
+        DefectGanBaseOptions.__init__(self)
+        BaseTrainOptions.__init__(self)
+
+    def initialize(self, parser):
+        parser = DefectGanBaseOptions.initialize(self, parser)
+        parser = BaseTrainOptions.initialize(self, parser)
+
+        # for displays
+        parser.add_argument('--num_display_images', type=int, default=4,
+                            help='# of display images')
+        parser.add_argument('--save_img_freq', type=int, default=1,
+                            help='frequency of saving generated images at the end of epochs')
+
+        parser.add_argument('--batch_size', type=int, default=16, help='input batch size')
+        # parser.add_argument('--max_device_batch_size', type=int, default=32)
+
+        # for displays
+        parser.add_argument('--num_display_images', type=int, default=4,
+                            help='# of display images')
+        parser.add_argument('--save_img_freq', type=int, default=1,
+                            help='frequency of saving generated images at the end of epochs')
+        # for training
+        parser.add_argument('--mask_ratio', type=float, default=0.75, help='ratio of masked area')
+        parser.add_argument('--optimizer', type=str, default='adamw',
+                            help='type of optimizer [sgd|rmsprop|adam|adamw]')
+        parser.add_argument('--num_epochs', type=int, default=500, help='how many epochs for learning')
+        parser.add_argument('--lr', type=float, nargs='+', default=[1.5e-4],
+                            help='initial learning rate for optimizer, '
+                                 'e.g. [lr] or [lr_d, lr_g]')
+        parser.add_argument('--scheduler', type=str, default='cos', help='type of scheduler [step|exp|cos]')
+        parser.add_argument('--lr_decay', type=float, default=0.05, help='learning rate decay for optimizer')
+
+        # for MAE
+        parser.add_argument('--patch_size', type=int, default=4, help='masked patch size, must be power of 2')
+        # parser.add_argument('--cycle_gan', type=bool, default=True, help='Whether to use cycleGAN architecture')
 
         return parser

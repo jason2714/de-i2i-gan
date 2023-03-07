@@ -6,7 +6,7 @@ import math
 from torchvision.utils import make_grid
 import numpy as np
 import cv2
-
+from utils.util import generate_mask
 
 class DefectGanModel(BaseModel):
     def __init__(self, opt):
@@ -30,7 +30,16 @@ class DefectGanModel(BaseModel):
                                            use_spectral=opt.use_spectral).to(opt.device, non_blocking=True)
 
     def __call__(self, mode, data, labels, df_data=None, img_only=False):
-        if mode == 'generator':
+        if mode in ('mae', 'mae_inference'):
+            self.netD.eval()
+            if mode == 'mae':
+                self.netG.train()
+                return self._compute_mae_loss(data, labels)
+            else:
+                self.netG.eval()
+                with torch.no_grad():
+                    return self._compute_mae_loss(data, labels)
+        elif mode == 'generator':
             self.netD.eval()
             self.netG.train()
             return self._compute_generator_loss(data, labels, df_data)
@@ -49,14 +58,28 @@ class DefectGanModel(BaseModel):
             self.netD.eval()
             self.netG.eval()
             return self._generate_fake_grids(data, labels, img_only)
+        elif mode == 'generate_mask_grid':
+            self.netD.eval()
+            self.netG.eval()
+            return self._generate_repair_mask_grid(data, labels)
         else:
             raise ValueError(f"|mode {mode}| is invalid")
+
+    def _compute_mae_loss(self, imgs, labels):
+        predicted_imgs, masks = self._repair_mask(imgs, labels)
+
+        # mae l2-loss
+        rec_loss = self._cal_loss(predicted_imgs * masks, imgs * masks, 'mse') / self.opt.mask_ratio
+
+        # # discriminator
+        # fake_defects_src, fake_defects_cls = self.netD(predicted_imgs)
+        return rec_loss
 
     def _compute_generator_loss(self, bg_data, df_labels, df_data):
         bg_data, df_labels, df_data = bg_data.to(self.netG.device, non_blocking=True), \
                                       df_labels.to(self.netG.device, non_blocking=True), \
                                       df_data.to(self.netG.device, non_blocking=True)
-        seg = df_labels.reshape(*df_labels.size(), 1, 1)
+        seg = self._expand_seg(df_labels)
 
         # normal -> defect -> normal
         fake_defects, df_prob = self.netG(bg_data, seg)
@@ -148,12 +171,7 @@ class DefectGanModel(BaseModel):
     @torch.no_grad()
     def _generate_fake(self, data, labels):
         data, labels = data.to(self.netG.device), labels.to(self.netG.device, non_blocking=True)
-        if len(labels.size()) == 2:
-            seg = labels.reshape(labels.size(0), labels.size(1), 1, 1)
-        elif len(labels.size()) == 4:
-            seg = labels
-        else:
-            raise ValueError(f"|labels dim {len(labels.size())}| is invalid")
+        seg = self._expand_seg(labels)
         return self.netG(data, seg)
 
     @torch.no_grad()
@@ -182,3 +200,35 @@ class DefectGanModel(BaseModel):
         nrow = 1 + (labels.size(0) if img_only else 3 * labels.size(0))
         df_grid = make_grid(df_images, nrow=nrow)
         return df_grid
+
+    @torch.no_grad()
+    def _generate_repair_mask_grid(self, imgs, labels):
+        predicted_imgs, masks = self._repair_mask(imgs, labels)
+        predicted_masked_imgs = predicted_imgs * (1 - masks)
+        combine_imgs = imgs * masks + predicted_masked_imgs
+
+        # generate grid
+        grid_imgs = torch.stack([imgs, combine_imgs, predicted_masked_imgs, predicted_imgs], dim=1)
+        grid_imgs = grid_imgs.transpose(0, 1).reshape(-1, *imgs.size()[1:])
+        nrow = 4
+
+        return make_grid(grid_imgs, nrow=nrow)
+
+    def _repair_mask(self, imgs, labels):
+        imgs = imgs.to(self.netG.device, non_blocking=True)
+        seg = self._expand_seg(torch.zeros_like(labels))
+        masks = generate_mask(imgs.size(), self.opt.patch_size, self.opt.mask_ratio)
+        masks = masks.to(self.netG.device, non_blocking=True)
+        masked_imgs = imgs * masks
+
+        predicted_imgs, _ = self.netG(masked_imgs, seg)
+        return predicted_imgs, masks
+
+    def _expand_seg(self, labels):
+        if len(labels.size()) == 2:
+            seg = labels.reshape(labels.size(0), labels.size(1), 1, 1)
+        elif len(labels.size()) == 4:
+            seg = labels
+        else:
+            raise ValueError(f"|labels dim {len(labels.size())}| is invalid")
+        return seg

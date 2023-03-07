@@ -33,20 +33,10 @@ class DefectGanTrainer(BaseTrainer):
         assert len(opt.lr) in (1, 2), f'length of lr must be 1 or 2, not {len(opt.lr)}'
         self.lr = {'D': opt.lr[0],
                    'G': opt.lr[1]} if len(opt.lr) == 2 else opt.lr[0]
-        # def _cal_dis_grad(self, real_data, fake_data):
 
     def _init_losses(self):
         self.losses = {loss_type: defaultdict(list)
                        for loss_type in self.loss_types}
-
-    #     alpha = torch.rand(real_data.shape[0], 1, 1, 1).expand_as(real_data).to(real_data.device)
-    #     max_data = Variable(alpha * real_data + (1 - alpha) * fake_data, requires_grad=True)
-    #     mix_logits = self.model.netD(max_data)
-    #     mix_grad = grad(mix_logits, max_data, grad_outputs=torch.ones_like(mix_logits))[0]
-    #     # mix_logits.backward(torch.ones_like(mix_logits))
-    #     # mix_grad = max_data.grad
-    #     return mix_grad.max()
-    #     # return mean(fake_grad)
 
     def _write_tf_log(self, writer, epoch, val_loaders):
         # for losses
@@ -86,7 +76,6 @@ class DefectGanTrainer(BaseTrainer):
         #             for metric in self.metrics:
         #                 writer.add_scalar(f'Metrics/{metric}', self.metrics[metric], epoch)
         # writer.close()
-
 
     def train(self, train_loaders, val_loaders=None):
         """

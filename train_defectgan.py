@@ -1,7 +1,7 @@
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 
 from datasets import find_dataset_using_name
-from options.defectgan_options import TrainOptions
+from options.defectgan_options import PreTrainOptions, TrainOptions
 from utils.util import worker_init_fn
 from torchvision import transforms
 from utils.util import fix_rand_seed
@@ -11,7 +11,6 @@ import math
 DATATYPE = ["defects", "background"]
 NUM_SAMPLES = {"defects": None,
                "background": int(1e10)}
-
 
 # def view_data_after_transform(opt, loaders):
 #     import numpy as np
@@ -47,12 +46,8 @@ NUM_SAMPLES = {"defects": None,
 #             import shutil
 #             shutil.copyfile(file_path, opt.ckpt_dir / opt.name / file_path.name)
 
-
-def main():
-    fix_rand_seed()
-    # defectgan_options
+def train():
     opt = TrainOptions().parse()
-
     dataset_cls = find_dataset_using_name(opt.dataset_name)
     # TODO calculate dataset's mean and std
     train_transform = transforms.Compose([
@@ -118,9 +113,11 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    fix_rand_seed()
+    train()
     '''
-    python train_defectgan.py --data_dir A:/research/data --name org_lw_fix --loss_weight 2 5 10 1 3 --npz_path A:/research/data/codebrim/val/defects00.npz --phase val --add_noise --use_spectral
+    python train_defectgan.py --data_dir A:/research/data --name org_lw_fix --loss_weight 2 5 10 1 3 --npz_path \
+    A:/research/data/codebrim/val/defects00.npz --phase val --add_noise --use_spectral
     python train_defectgan.py --name org_lw_wo_resize --continue_training --load_from_opt_file
     tensorboard --logdir log\test_df --samples_per_plugin "images=100"
     '''

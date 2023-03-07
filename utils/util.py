@@ -4,7 +4,7 @@ import torch
 import logging
 from pathlib import Path
 import torchvision
-
+from torch import nn
 
 def use_gpu(gpu_ids=0):
     use_cuda = torch.cuda.is_available()
@@ -43,3 +43,14 @@ def init_logging(name, level=logging.INFO):
     return logging.getLogger(name)
 
 
+def generate_mask(image_size, patch_size, mask_ratio):
+    """
+        input image_size: (b, c, h, w)
+        output size: (b, 1, h, w)
+    """
+    up_scale = nn.Upsample(scale_factor=patch_size, mode='nearest')
+    height_size = image_size[2] // patch_size
+    width_size = image_size[3] // patch_size
+    mask = torch.bernoulli(torch.full((image_size[0], 1, height_size, width_size), (1 - mask_ratio)))
+
+    return up_scale(mask)
