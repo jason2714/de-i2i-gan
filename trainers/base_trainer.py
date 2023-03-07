@@ -79,6 +79,7 @@ class BaseTrainer:
 
     def _create_scheduler(self, opt):
         sched_args = dict(verbose=True)
+        ext_args = defaultdict(dict)
         if opt.scheduler == 'step':
             sched_cls = optim.lr_scheduler.StepLR
             step_cnt = 4
@@ -89,14 +90,25 @@ class BaseTrainer:
             sched_args['gamma'] = opt.lr_decay ** (1 / opt.num_epochs)
         elif opt.scheduler == 'cos':
             sched_cls = optim.lr_scheduler.CosineAnnealingLR
-            sched_args['eta_min'] = opt.lr * opt.lr_decay
+            # sched_args['eta_min'] = self.lr * opt.lr_decay
             sched_args['T_max'] = opt.num_epochs
         else:
             raise NameError(f'scheduler named {opt.scheduler} not defined')
-        self.schedulers = {
-            model_name: sched_cls(optimizer, **sched_args)
-            for model_name, optimizer in self.optimizers.items()
-        }
+        if opt.scheduler == 'cos':
+            for network_name, network in self.model.networks.items():
+                if isinstance(self.lr, dict):
+                    ext_args['eta_min'][network_name] = self.lr[network_name] * opt.lr_decay
+                else:
+                    ext_args['eta_min'][network_name] = self.lr * opt.lr_decay
+        self.schedulers = dict()
+        for model_name, optimizer in self.optimizers.items():
+            for key, value in ext_args.items():
+                sched_args[key] = value[model_name]
+            self.schedulers[model_name] = sched_cls(optimizer, **sched_args)
+        # self.schedulers = {
+        #     model_name: sched_cls(optimizer, **sched_args)
+        #     for model_name, optimizer in self.optimizers.items()
+        # }
         # initial lr
         for _ in range(self.first_epoch):
             for scheduler in self.schedulers.values():

@@ -73,7 +73,7 @@ def train():
     # change loader to iterator
     val_loaders['background_inf'] = iter(val_loaders['background'])
 
-    trainer = find_trainer_using_model_name(opt.model)(opt, len(train_loaders['background']))
+    trainer = find_trainer_using_model_name('mae')(opt, len(train_loaders['background']))
     trainer.train(train_loaders, val_loaders)
 
 
