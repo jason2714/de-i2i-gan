@@ -120,14 +120,10 @@ class PreTrainOptions(DefectGanBaseOptions, BaseTrainOptions):
         parser = DefectGanBaseOptions.initialize(self, parser)
         parser = BaseTrainOptions.initialize(self, parser)
 
-        # for displays
-        parser.add_argument('--num_display_images', type=int, default=4,
-                            help='# of display images')
-        parser.add_argument('--save_img_freq', type=int, default=1,
-                            help='frequency of saving generated images at the end of epochs')
-
         parser.add_argument('--batch_size', type=int, default=32, help='input batch size')
         # parser.add_argument('--max_device_batch_size', type=int, default=32)
+        parser.add_argument('--save_latest_freq', type=int, default=300,
+                            help='frequency of saving latest checkpoints at the end of iters')
 
         # for displays
         parser.add_argument('--num_display_images', type=int, default=4,

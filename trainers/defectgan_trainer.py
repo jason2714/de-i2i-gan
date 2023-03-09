@@ -123,6 +123,9 @@ class DefectGanTrainer(BaseTrainer):
                  rec_loss * self.loss_weights['rec'] + \
                  sd_cyc_loss * self.loss_weights['sd_cyc'] + \
                  sd_con_loss * self.loss_weights['sd_con']
+        # self.scaler.scale(g_loss).backward()
+        # self.scaler.step(self.optimizers['G'])
+        # self.scaler.update()
         g_loss.backward()
         self.optimizers['G'].step()
         self.losses['gan']['G'].append(gan_loss.item())
@@ -135,6 +138,9 @@ class DefectGanTrainer(BaseTrainer):
         self.optimizers['D'].zero_grad()
         gan_loss, clf_loss = self.model('discriminator', bg_data, df_labels, df_data)
         d_loss = gan_loss + clf_loss * self.loss_weights['clf_d']
+        # self.scaler.scale(d_loss).backward()
+        # self.scaler.step(self.optimizers['D'])
+        # self.scaler.update()
         d_loss.backward()
         self.optimizers['D'].step()
         self.losses['gan']['D'].append(gan_loss.item())

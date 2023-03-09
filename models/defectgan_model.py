@@ -7,6 +7,7 @@ from torchvision.utils import make_grid
 import numpy as np
 import cv2
 from utils.util import generate_mask
+from torch import autocast
 
 class DefectGanModel(BaseModel):
     def __init__(self, opt):
@@ -32,25 +33,26 @@ class DefectGanModel(BaseModel):
     def __call__(self, mode, data, labels, df_data=None, img_only=False):
         # for mae
         if mode.startswith('mae'):
-            if mode == 'mae_generator':
-                self.netD.eval()
-                self.netG.train()
-                return self._compute_mae_generator_loss(data, labels)
-            elif mode == 'mae_discriminator':
-                self.netD.train()
-                self.netG.eval()
-                return self._compute_mae_discriminator_loss(data, labels)
-            elif mode == 'mae_inference':
-                self.netD.eval()
-                self.netG.eval()
-                with torch.no_grad():
+            with autocast(device_type='cuda'):
+                if mode == 'mae_generator':
+                    self.netD.eval()
+                    self.netG.train()
                     return self._compute_mae_generator_loss(data, labels)
-            elif mode == 'mae_generate_grid':
-                self.netD.eval()
-                self.netG.eval()
-                return self._generate_repair_mask_grid(data, labels)
-            else:
-                raise ValueError(f"|mode {mode}| is invalid")
+                elif mode == 'mae_discriminator':
+                    self.netD.train()
+                    self.netG.eval()
+                    return self._compute_mae_discriminator_loss(data, labels)
+                elif mode == 'mae_inference':
+                    self.netD.eval()
+                    self.netG.eval()
+                    with torch.no_grad():
+                        return self._compute_mae_generator_loss(data, labels)
+                elif mode == 'mae_generate_grid':
+                    self.netD.eval()
+                    self.netG.eval()
+                    return self._generate_repair_mask_grid(data, labels)
+                else:
+                    raise ValueError(f"|mode {mode}| is invalid")
         # for defectgan
         else:
             if mode == 'generator':

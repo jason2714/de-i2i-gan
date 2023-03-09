@@ -8,12 +8,13 @@ from utils.util import fix_rand_seed
 from trainers import find_trainer_using_model_name
 import math
 
-TRAIN_DATATYPE = ["defects", "background"]
-TRAIN_NUM_SAMPLES = {"defects": None,
+TRAIN_DATATYPE = ["fusion", "background"]
+TRAIN_NUM_SAMPLES = {"fusion": None,
                      "background": None}
-VAL_DATATYPE = ["background", "background_inf"]
-VAL_NUM_SAMPLES = {"background": None,
-                   "background_inf": int(1e10)}
+VAL_DATATYPE = ["fusion", "defects", "background"]
+VAL_NUM_SAMPLES = {"fusion": None,
+                   "defects": int(1e10),
+                   "background": int(1e10)}
 
 
 def train():
@@ -54,7 +55,7 @@ def train():
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     ])
     val_datasets = {
-        data_type: dataset_cls(opt, phase='val', data_type='background', transform=val_transform)
+        data_type: dataset_cls(opt, phase='val', data_type=data_type, transform=val_transform)
         for data_type in VAL_DATATYPE
     }
     val_samplers = {
@@ -71,9 +72,10 @@ def train():
         print(f'{len(val_loaders[data_type].dataset)} images in val {data_type} set')
 
     # change loader to iterator
-    val_loaders['background_inf'] = iter(val_loaders['background_inf'])
+    val_loaders['background'] = iter(val_loaders['background'])
+    val_loaders['defects'] = iter(val_loaders['defects'])
 
-    trainer = find_trainer_using_model_name('mae')(opt, len(train_loaders['background']))
+    trainer = find_trainer_using_model_name('mae')(opt, len(train_loaders['fusion']), dataset_cls.DATA_TYPE)
     trainer.train(train_loaders, val_loaders)
 
 
@@ -81,7 +83,7 @@ if __name__ == '__main__':
     fix_rand_seed()
     train()
     '''
-    python train_mae.py --data_dir A:/research/data --name mae --phase val --add_noise --use_spectral
+    python train_mae.py --data_dir A:/research/data --name mae --phase val --add_noise --use_spectral --lr 1.5e-4 5e-4
     python train_mae.py --name mae --continue_training --load_from_opt_file
     tensorboard --logdir log/mae --samples_per_plugin "images=100"
     '''

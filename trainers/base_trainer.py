@@ -6,6 +6,7 @@ from torch import optim
 
 from models import create_model
 import numpy as np
+from torch.cuda.amp import GradScaler
 
 
 class BaseTrainer:
@@ -15,7 +16,7 @@ class BaseTrainer:
     and the latest visuals to visualize the progress in training.
     """
 
-    def __init__(self, opt, iters_per_epoch):
+    def __init__(self, opt, iters_per_epoch, data_types=None):
         self.opt = opt
 
         # initial model
@@ -51,6 +52,13 @@ class BaseTrainer:
         self._init_lr(opt)
         self._create_optimizer(opt)
         self._create_scheduler(opt)
+
+        # initial attributes for dataset
+        self.data_types = data_types
+
+        # initial amp
+        # Creates a GradScaler once at the beginning of training.
+        self.scaler = GradScaler()
 
     def _init_lr(self, opt):
         """transform lr from list to scalar or dict

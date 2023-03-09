@@ -1,6 +1,3 @@
-from metrics.fid_score import calculate_fid
-from metrics.inception import InceptionV3
-from trainers.base_trainer import BaseTrainer
 import torch
 from collections import defaultdict
 from tqdm import tqdm
@@ -14,8 +11,8 @@ import cv2
 
 
 class MAETrainer(BaseTrainer):
-    def __init__(self, opt, iters_per_epoch=math.inf):
-        super().__init__(opt, iters_per_epoch)
+    def __init__(self, opt, iters_per_epoch=math.inf, data_types=None):
+        super().__init__(opt, iters_per_epoch, data_types)
         self.loss_weights = {'rec': opt.loss_weight[0]}
         self.loss_types = ['rec', 'gan']
         self._init_losses()
@@ -39,9 +36,10 @@ class MAETrainer(BaseTrainer):
 
         # for generated image
         if epoch % self.opt.save_img_freq == 0:
-            bg_data, bg_labels, _ = next(val_loaders['background_inf'])
-            repaired_grid = self.model('mae_generate_grid', bg_data, bg_labels)
-            writer.add_image('Images/Masked', repaired_grid, epoch)
+            for data_type in self.data_types:
+                data, labels, _ = next(val_loaders[data_type])
+                repaired_grid = self.model('mae_generate_grid', data, labels)
+                writer.add_image(f'Images/{data_type}', repaired_grid, epoch)
 
     def train(self, train_loaders, val_loaders=None):
         """
@@ -59,7 +57,7 @@ class MAETrainer(BaseTrainer):
         writer.close()
 
     def _train_epoch(self, data_loaders, epoch):
-        pbar = tqdm(data_loaders['background'], colour='MAGENTA')
+        pbar = tqdm(data_loaders['fusion'], colour='MAGENTA')
         # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
         for bg_data, bg_labels, _ in pbar:
             self.iters += 1
@@ -82,7 +80,7 @@ class MAETrainer(BaseTrainer):
 
     @torch.no_grad()
     def _val_epoch(self, data_loader, epoch):
-        pbar = tqdm(data_loader['background'], colour='MAGENTA')
+        pbar = tqdm(data_loader['fusion'], colour='MAGENTA')
         # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
         for data, labels, _ in pbar:
             pbar.set_description(f'Validating model at epoch {epoch}... ')
@@ -96,8 +94,11 @@ class MAETrainer(BaseTrainer):
         self.optimizers['G'].zero_grad()
         rec_loss, gan_loss = self.model('mae_generator', data, labels)
         g_loss = gan_loss + rec_loss * self.loss_weights['rec']
-        g_loss.backward()
-        self.optimizers['G'].step()
+        self.scaler.scale(g_loss).backward()
+        self.scaler.step(self.optimizers['G'])
+        self.scaler.update()
+        # g_loss.backward()
+        # self.optimizers['G'].step()
         self.losses['rec']['train'].append(rec_loss.item())
         self.losses['gan']['G'].append(gan_loss.item())
 
@@ -105,6 +106,9 @@ class MAETrainer(BaseTrainer):
         self.optimizers['D'].zero_grad()
         gan_loss = self.model('mae_discriminator', data, labels)
         d_loss = gan_loss
-        d_loss.backward()
-        self.optimizers['D'].step()
+        self.scaler.scale(d_loss).backward()
+        self.scaler.step(self.optimizers['D'])
+        self.scaler.update()
+        # d_loss.backward()
+        # self.optimizers['D'].step()
         self.losses['gan']['D'].append(gan_loss.item())
