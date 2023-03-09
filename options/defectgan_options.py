@@ -126,7 +126,7 @@ class PreTrainOptions(DefectGanBaseOptions, BaseTrainOptions):
         parser.add_argument('--save_img_freq', type=int, default=1,
                             help='frequency of saving generated images at the end of epochs')
 
-        parser.add_argument('--batch_size', type=int, default=16, help='input batch size')
+        parser.add_argument('--batch_size', type=int, default=32, help='input batch size')
         # parser.add_argument('--max_device_batch_size', type=int, default=32)
 
         # for displays
@@ -138,15 +138,19 @@ class PreTrainOptions(DefectGanBaseOptions, BaseTrainOptions):
         parser.add_argument('--mask_ratio', type=float, default=0.75, help='ratio of masked area')
         parser.add_argument('--optimizer', type=str, default='adamw',
                             help='type of optimizer [sgd|rmsprop|adam|adamw]')
-        parser.add_argument('--num_epochs', type=int, default=500, help='how many epochs for learning')
+        parser.add_argument('--num_epochs', type=int, default=200, help='how many epochs for learning')
         parser.add_argument('--lr', type=float, nargs='+', default=[1.5e-4],
                             help='initial learning rate for optimizer, '
                                  'e.g. [lr] or [lr_d, lr_g]')
         parser.add_argument('--scheduler', type=str, default='cos', help='type of scheduler [step|exp|cos]')
         parser.add_argument('--lr_decay', type=float, default=0.05, help='learning rate decay for optimizer')
+        parser.add_argument('--loss_weight', type=int, nargs='+', default=[10],
+                            help='aggregation weight for each loss, [rec]')
+        parser.add_argument('--num_critics', type=int, default=1,
+                            help='number of discriminator iterations per generator iterations.')
 
         # for MAE
-        parser.add_argument('--patch_size', type=int, default=4, help='masked patch size, must be power of 2')
+        parser.add_argument('--patch_size', type=int, default=8, help='masked patch size, must be power of 2')
         # parser.add_argument('--cycle_gan', type=bool, default=True, help='Whether to use cycleGAN architecture')
 
         return parser

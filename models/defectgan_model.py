@@ -30,50 +30,80 @@ class DefectGanModel(BaseModel):
                                            use_spectral=opt.use_spectral).to(opt.device, non_blocking=True)
 
     def __call__(self, mode, data, labels, df_data=None, img_only=False):
-        if mode in ('mae', 'mae_inference'):
-            self.netD.eval()
-            if mode == 'mae':
+        # for mae
+        if mode.startswith('mae'):
+            if mode == 'mae_generator':
+                self.netD.eval()
                 self.netG.train()
-                return self._compute_mae_loss(data, labels)
-            else:
+                return self._compute_mae_generator_loss(data, labels)
+            elif mode == 'mae_discriminator':
+                self.netD.train()
+                self.netG.eval()
+                return self._compute_mae_discriminator_loss(data, labels)
+            elif mode == 'mae_inference':
+                self.netD.eval()
                 self.netG.eval()
                 with torch.no_grad():
-                    return self._compute_mae_loss(data, labels)
-        elif mode == 'generator':
-            self.netD.eval()
-            self.netG.train()
-            return self._compute_generator_loss(data, labels, df_data)
-        elif mode == 'discriminator':
-            self.netD.train()
-            self.netG.eval()
-            return self._compute_discriminator_loss(data, labels, df_data)
-        # elif mode == 'encode_only':
-        #     z, mu, logvar = self.encode_z(real_image)
-        #     return mu, logvar
-        elif mode == 'inference':
-            self.netD.eval()
-            self.netG.eval()
-            return self._generate_fake(data, labels)
-        elif mode == 'generate_grid':
-            self.netD.eval()
-            self.netG.eval()
-            return self._generate_fake_grids(data, labels, img_only)
-        elif mode == 'generate_mask_grid':
-            self.netD.eval()
-            self.netG.eval()
-            return self._generate_repair_mask_grid(data, labels)
+                    return self._compute_mae_generator_loss(data, labels)
+            elif mode == 'mae_generate_grid':
+                self.netD.eval()
+                self.netG.eval()
+                return self._generate_repair_mask_grid(data, labels)
+            else:
+                raise ValueError(f"|mode {mode}| is invalid")
+        # for defectgan
         else:
-            raise ValueError(f"|mode {mode}| is invalid")
+            if mode == 'generator':
+                self.netD.eval()
+                self.netG.train()
+                return self._compute_generator_loss(data, labels, df_data)
+            elif mode == 'discriminator':
+                self.netD.train()
+                self.netG.eval()
+                return self._compute_discriminator_loss(data, labels, df_data)
+            elif mode == 'inference':
+                self.netD.eval()
+                self.netG.eval()
+                return self._generate_fake(data, labels)
+            elif mode == 'generate_grid':
+                self.netD.eval()
+                self.netG.eval()
+                return self._generate_fake_grids(data, labels, img_only)
+            else:
+                raise ValueError(f"|mode {mode}| is invalid")
 
-    def _compute_mae_loss(self, imgs, labels):
+    def _compute_mae_generator_loss(self, imgs, labels):
+        imgs, labels = imgs.to(self.netG.device, non_blocking=True), labels.to(self.netG.device, non_blocking=True)
+
         predicted_imgs, masks = self._repair_mask(imgs, labels)
 
         # mae l2-loss
-        rec_loss = self._cal_loss(predicted_imgs * masks, imgs * masks, 'mse') / self.opt.mask_ratio
+        rec_loss = self._cal_loss(predicted_imgs, imgs, 'mse')
+        # rec_loss = self._cal_loss(predicted_imgs * (1 - masks), imgs * (1 - masks), 'mse') / self.opt.mask_ratio
 
-        # # discriminator
-        # fake_defects_src, fake_defects_cls = self.netD(predicted_imgs)
-        return rec_loss
+        # discriminator
+        fake_src, _ = self.netD(predicted_imgs)
+        fake_labels = torch.ones_like(fake_src, dtype=torch.float).to(self.netD.device, non_blocking=True)
+        gan_loss = self._cal_loss(fake_src, fake_labels, 'bce')
+        return rec_loss, gan_loss
+
+    def _compute_mae_discriminator_loss(self, imgs, labels):
+        imgs, labels = imgs.to(self.netG.device, non_blocking=True), labels.to(self.netG.device, non_blocking=True)
+        with torch.no_grad():
+            predicted_imgs, masks = self._repair_mask(imgs, labels)
+
+        predicted_imgs.requires_grad = True
+
+        # discriminator
+        fake_src, _ = self.netD(predicted_imgs.detach_())
+        real_src, _ = self.netD(imgs)
+
+        # gan loss
+        real_labels = torch.ones_like(real_src, dtype=torch.float).to(self.netD.device, non_blocking=True)
+        fake_labels = torch.zeros_like(fake_src, dtype=torch.float).to(self.netD.device, non_blocking=True)
+        gan_loss = {'fake': self._cal_loss(fake_src, fake_labels, 'bce'),
+                    'real': self._cal_loss(real_src, real_labels, 'bce')}
+        return torch.stack(list(gan_loss.values())).mean()
 
     def _compute_generator_loss(self, bg_data, df_labels, df_data):
         bg_data, df_labels, df_data = bg_data.to(self.netG.device, non_blocking=True), \
@@ -186,7 +216,10 @@ class DefectGanModel(BaseModel):
                 for slice_data in df_data:
                     df_images += [slice_data]
             else:
-                foreground = torch.clamp((df_data - data * (1 - df_prob)) / (df_prob + 1e-8), min=-1, max=1)
+                if self.opt.cycle:
+                    foreground = df_data
+                else:
+                    foreground = torch.clamp((df_data - data * (1 - df_prob)) / (df_prob + 1e-8), min=-1, max=1)
                 df_data = (df_data / 2 + 0.5).detach().cpu()
                 foreground = (foreground / 2 + 0.5).detach().cpu()
                 df_prob = df_prob.detach().cpu()
@@ -203,19 +236,21 @@ class DefectGanModel(BaseModel):
 
     @torch.no_grad()
     def _generate_repair_mask_grid(self, imgs, labels):
+        imgs, labels = imgs.to(self.netG.device, non_blocking=True), labels.to(self.netG.device, non_blocking=True)
         predicted_imgs, masks = self._repair_mask(imgs, labels)
+        masked_imgs = imgs * masks
         predicted_masked_imgs = predicted_imgs * (1 - masks)
-        combine_imgs = imgs * masks + predicted_masked_imgs
+        combine_imgs = masked_imgs + predicted_masked_imgs
 
         # generate grid
-        grid_imgs = torch.stack([imgs, combine_imgs, predicted_masked_imgs, predicted_imgs], dim=1)
+        grid_imgs = torch.stack([imgs, combine_imgs, masked_imgs, predicted_imgs, predicted_masked_imgs], dim=0)
         grid_imgs = grid_imgs.transpose(0, 1).reshape(-1, *imgs.size()[1:])
-        nrow = 4
+        grid_imgs = (grid_imgs / 2 + 0.5).detach().cpu()
+        nrow = 5
 
         return make_grid(grid_imgs, nrow=nrow)
 
     def _repair_mask(self, imgs, labels):
-        imgs = imgs.to(self.netG.device, non_blocking=True)
         seg = self._expand_seg(torch.zeros_like(labels))
         masks = generate_mask(imgs.size(), self.opt.patch_size, self.opt.mask_ratio)
         masks = masks.to(self.netG.device, non_blocking=True)

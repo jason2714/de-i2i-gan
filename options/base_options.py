@@ -39,6 +39,7 @@ class BaseOptions:
         parser.add_argument('--init_variance', type=float, default=0.02,
                             help='variance of the initialization distribution')
         parser.add_argument('--use_spectral', action='store_true', help='whether to use spectral norm in conv block')
+        parser.add_argument('--load_model_name', type=str, default=None, help='where the model is loaded from')
         parser.add_argument('--which_epoch', type=str, default='latest',
                             help='which epoch to load? set to latest to use latest cached model')
 
@@ -76,11 +77,14 @@ class BaseOptions:
                 ckpt_dir = opt.ckpt_dir / name
             parser.set_defaults(name=name)
 
-        # # modify model-related parser options
+        # modify model-related parser options
         # model_name = opt.model
         # model_option_setter = models.get_option_setter(model_name)
         # parser = model_option_setter(parser, self.is_train)
-        #
+        # set load_model_name to name if load_model_name is not set
+        if opt.load_model_name == parser.get_default('load_model_name'):
+            parser.set_defaults(load_model_name=opt.name)
+
         # opt, unknown = parser.parse_known_args()
 
         # if there is opt_file, load it.
@@ -128,7 +132,7 @@ class BaseOptions:
     def update_options_from_file(self, parser, opt):
         old_opt = self.load_options(opt)
         for k, v in sorted(vars(opt).items()):
-            if k != 'name' and hasattr(old_opt, k) and v != getattr(old_opt, k):
+            if k not in ('name', 'load_model_name') and hasattr(old_opt, k) and v != getattr(old_opt, k):
                 new_val = getattr(old_opt, k)
                 parser.set_defaults(**{k: new_val})
         return parser

@@ -13,7 +13,7 @@ def save_network(net, net_label, epoch, opt):
 
 def load_network(net, net_label, epoch, opt):
     load_fn = f'{epoch}_net_{net_label}.pth'
-    save_path = opt.ckpt_dir / opt.name / load_fn
+    save_path = opt.ckpt_dir / opt.load_model_name / load_fn
     weights = torch.load(save_path)
     net.load_state_dict(weights)
     return net.to(opt.device, non_blocking=True)

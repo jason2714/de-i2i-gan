@@ -116,8 +116,7 @@ if __name__ == '__main__':
     fix_rand_seed()
     train()
     '''
-    python train_defectgan.py --data_dir A:/research/data --name org_lw_fix --loss_weight 2 5 10 1 3 --npz_path \
-    A:/research/data/codebrim/val/defects00.npz --phase val --add_noise --use_spectral
+    python train_defectgan.py --data_dir A:/research/data --name org_mae --loss_weight 2 5 10 1 3 --npz_path A:/research/data/codebrim/val/defects00.npz --phase val --add_noise --use_spectral --load_model_name mae_gan_lr
     python train_defectgan.py --name org_lw_wo_resize --continue_training --load_from_opt_file
     tensorboard --logdir log\test_df --samples_per_plugin "images=100"
     '''

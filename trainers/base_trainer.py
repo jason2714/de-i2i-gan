@@ -20,9 +20,12 @@ class BaseTrainer:
 
         # initial model
         self.model = create_model(opt)
-        self.model.init_weights()
         if opt.continue_training:
             self.model.load('latest')
+        elif opt.load_model_name is not None:
+            self.model.load(opt.which_epoch)
+        else:
+            self.model.init_weights()
 
         # initial losses and metrics
         self.losses = defaultdict(list)
@@ -78,7 +81,7 @@ class BaseTrainer:
             self.optimizers[network_name] = optim_cls(network.parameters(), **optim_args)
 
     def _create_scheduler(self, opt):
-        sched_args = dict(verbose=True)
+        sched_args = dict()
         ext_args = defaultdict(dict)
         if opt.scheduler == 'step':
             sched_cls = optim.lr_scheduler.StepLR

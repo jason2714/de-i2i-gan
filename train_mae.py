@@ -71,7 +71,7 @@ def train():
         print(f'{len(val_loaders[data_type].dataset)} images in val {data_type} set')
 
     # change loader to iterator
-    val_loaders['background_inf'] = iter(val_loaders['background'])
+    val_loaders['background_inf'] = iter(val_loaders['background_inf'])
 
     trainer = find_trainer_using_model_name('mae')(opt, len(train_loaders['background']))
     trainer.train(train_loaders, val_loaders)
@@ -83,5 +83,5 @@ if __name__ == '__main__':
     '''
     python train_mae.py --data_dir A:/research/data --name mae --phase val --add_noise --use_spectral
     python train_mae.py --name mae --continue_training --load_from_opt_file
-    tensorboard --logdir log/test_df --samples_per_plugin "images=100"
+    tensorboard --logdir log/mae --samples_per_plugin "images=100"
     '''

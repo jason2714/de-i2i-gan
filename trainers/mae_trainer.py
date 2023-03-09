@@ -16,12 +16,9 @@ import cv2
 class MAETrainer(BaseTrainer):
     def __init__(self, opt, iters_per_epoch=math.inf):
         super().__init__(opt, iters_per_epoch)
-        self.loss_types = ['rec']
+        self.loss_weights = {'rec': opt.loss_weight[0]}
+        self.loss_types = ['rec', 'gan']
         self._init_losses()
-        # if opt.phase == 'val':
-        #     block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[opt.dims]
-        #     self.inception_model = InceptionV3([block_idx]).to(opt.device, non_blocking=True)
-        #     self.inception_model.eval()
 
     def _init_lr(self, opt):
         assert len(opt.lr) in (1, 2), f'length of lr must be 1 or 2, not {len(opt.lr)}'
@@ -43,14 +40,13 @@ class MAETrainer(BaseTrainer):
         # for generated image
         if epoch % self.opt.save_img_freq == 0:
             bg_data, bg_labels, _ = next(val_loaders['background_inf'])
-            repaired_grid = self.model('generate_mask_grid', bg_data, bg_labels)
+            repaired_grid = self.model('mae_generate_grid', bg_data, bg_labels)
             writer.add_image('Images/Masked', repaired_grid, epoch)
 
     def train(self, train_loaders, val_loaders=None):
         """
         epoch start with 1, end with num_epochs
         """
-        # TODO
         writer = SummaryWriter(self.opt.log_dir / self.opt.name)
         for epoch in range(self.first_epoch, self.opt.num_epochs + 1):
             self._init_losses()
@@ -70,43 +66,45 @@ class MAETrainer(BaseTrainer):
             pbar.set_description(f'Epoch: [{epoch}/{self.opt.num_epochs}], '
                                  f'Iter: [{self.iters}/{self.opt.num_iters}]')
 
-            # # get bg data and truncate them to the same as batch_size of defect data
-            # df_data, df_labels, _ = next(data_loaders['defects'])
-
-            # self._train_discriminator_once(bg_data, df_labels, df_data)
-            self._train_generator_once(bg_data, bg_labels)
+            self._train_discriminator_once(bg_data, bg_labels)
+            if self.iters % self.opt.num_critics == 0:
+                self._train_generator_once(bg_data, bg_labels)
 
             if self.iters % self.opt.save_latest_freq == 0:
                 self.model.save('latest')
                 np.savetxt(self.iter_record_path, (epoch, self.iters), fmt='%i', delimiter=',')
-            pbar.set_postfix(rec=f'{sum(self.losses["rec"]["train"]) / (len(self.losses["rec"]["train"]) + 1e-12):.4f}')
+            pbar.set_postfix(rec=f'{sum(self.losses["rec"]["train"]) / (len(self.losses["rec"]["train"]) + 1e-12):.4f}',
+                             gan_D=f'{sum(self.losses["gan"]["D"]) / (len(self.losses["gan"]["D"]) + 1e-12):.4f}',
+                             gan_G=f'{sum(self.losses["gan"]["G"]) / (len(self.losses["gan"]["G"]) + 1e-12):.4f}')
+
         for model_name in self.schedulers.keys():
             self.schedulers[model_name].step()
 
     @torch.no_grad()
     def _val_epoch(self, data_loader, epoch):
-        mse_losses = []
         pbar = tqdm(data_loader['background'], colour='MAGENTA')
         # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
         for data, labels, _ in pbar:
             pbar.set_description(f'Validating model at epoch {epoch}... ')
-            rec_loss = self.model('mae_inference', data, labels)
-            mse_losses.append(rec_loss.item())
-            pbar.set_postfix(rec=f'{sum(mse_losses) / (len(mse_losses) + 1e-12):.4f}')
-        self.losses['rec']['val'] = sum(mse_losses) / (len(mse_losses) + 1e-12)
+            rec_loss, gan_loss = self.model('mae_inference', data, labels)
+            self.losses['rec']['val'].append(rec_loss.item())
+            self.losses['gan']['val'].append(gan_loss.item())
+            pbar.set_postfix(rec=f'{sum(self.losses["rec"]["val"]) / (len(self.losses["rec"]["val"]) + 1e-12):.4f}',
+                             gan=f'{sum(self.losses["gan"]["val"]) / (len(self.losses["gan"]["val"]) + 1e-12):.4f}')
 
     def _train_generator_once(self, data, labels):
         self.optimizers['G'].zero_grad()
-        rec_loss = self.model('mae', data, labels)
-        rec_loss.backward()
+        rec_loss, gan_loss = self.model('mae_generator', data, labels)
+        g_loss = gan_loss + rec_loss * self.loss_weights['rec']
+        g_loss.backward()
         self.optimizers['G'].step()
         self.losses['rec']['train'].append(rec_loss.item())
+        self.losses['gan']['G'].append(gan_loss.item())
 
-    def _train_discriminator_once(self, bg_data, df_labels, df_data):
+    def _train_discriminator_once(self, data, labels):
         self.optimizers['D'].zero_grad()
-        # gan_loss, clf_loss = self.model('discriminator', bg_data, df_labels, df_data)
-        # d_loss = gan_loss + clf_loss * self.loss_weights['clf_d']
-        # d_loss.backward()
-        # self.optimizers['D'].step()
-        # self.losses['gan']['D'].append(gan_loss.item())
-        # self.losses['clf']['D'].append(clf_loss.item())
+        gan_loss = self.model('mae_discriminator', data, labels)
+        d_loss = gan_loss
+        d_loss.backward()
+        self.optimizers['D'].step()
+        self.losses['gan']['D'].append(gan_loss.item())
