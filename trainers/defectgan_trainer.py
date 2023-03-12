@@ -14,8 +14,8 @@ import cv2
 
 
 class DefectGanTrainer(BaseTrainer):
-    def __init__(self, opt, iters_per_epoch=math.inf):
-        super().__init__(opt, iters_per_epoch)
+    def __init__(self, opt):
+        super().__init__(opt)
         assert len(opt.loss_weight) == 5, f'length of loss weights must be 5, not {len(opt.loss_weight)}'
         self.loss_weights = {'clf_d': opt.loss_weight[0],
                              'clf_g': opt.loss_weight[1],
