@@ -16,7 +16,7 @@ class BaseTrainer:
     and the latest visuals to visualize the progress in training.
     """
 
-    def __init__(self, opt, iters_per_epoch, data_types=None):
+    def __init__(self, opt):
         self.opt = opt
 
         # initial model
@@ -38,11 +38,13 @@ class BaseTrainer:
         self.iter_record_path = opt.ckpt_dir / opt.name / 'iter.txt'
         self.first_epoch = 1
         self.iters = 0
+        assert hasattr(self.opt, 'iters_per_epoch'), 'opt must have attribute {iters_per_epoch}, ' \
+                                                     'it can be calculated by length of loader'
         if opt.continue_training:
             self.first_epoch, self.iters = np.loadtxt(self.iter_record_path, delimiter=',', dtype=int)
         if self.opt.num_epochs == -1:
-            self.opt.num_epochs = math.ceil(self.opt.num_iters / (iters_per_epoch + 1e-12))
-        self.opt.num_iters = self.opt.num_epochs * iters_per_epoch
+            self.opt.num_epochs = math.ceil(self.opt.num_iters / (self.opt.iters_per_epoch + 1e-12))
+        self.opt.num_iters = self.opt.num_epochs * self.opt.iters_per_epoch
         assert self.first_epoch < self.opt.num_epochs, f'first_epoch {self.first_epoch} should not larger than ' \
                                                        f'num_epochs {self.opt.num_epochs}'
         assert self.iters < self.opt.num_iters, f'iters {self.iters} should not larger than ' \
@@ -52,9 +54,6 @@ class BaseTrainer:
         self._init_lr(opt)
         self._create_optimizer(opt)
         self._create_scheduler(opt)
-
-        # initial attributes for dataset
-        self.data_types = data_types
 
         # initial amp
         # Creates a GradScaler once at the beginning of training.

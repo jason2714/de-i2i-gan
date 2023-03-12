@@ -11,11 +11,16 @@ import cv2
 
 
 class MAETrainer(BaseTrainer):
-    def __init__(self, opt, iters_per_epoch=math.inf, data_types=None):
-        super().__init__(opt, iters_per_epoch, data_types)
-        self.loss_weights = {'rec': opt.loss_weight[0]}
-        self.loss_types = ['rec', 'gan']
+    def __init__(self, opt, data_types):
+        super().__init__(opt)
+        self.loss_weights = {'rec': opt.loss_weight[0],
+                             'clf_D': opt.loss_weight[1],
+                             'clf_G': opt.loss_weight[2]}
+        self.loss_types = ['rec', 'gan', 'clf']
         self._init_losses()
+
+        # initial attributes for dataset
+        self.data_types = data_types
 
     def _init_lr(self, opt):
         assert len(opt.lr) in (1, 2), f'length of lr must be 1 or 2, not {len(opt.lr)}'
@@ -73,7 +78,9 @@ class MAETrainer(BaseTrainer):
                 np.savetxt(self.iter_record_path, (epoch, self.iters), fmt='%i', delimiter=',')
             pbar.set_postfix(rec=f'{sum(self.losses["rec"]["train"]) / (len(self.losses["rec"]["train"]) + 1e-12):.4f}',
                              gan_D=f'{sum(self.losses["gan"]["D"]) / (len(self.losses["gan"]["D"]) + 1e-12):.4f}',
-                             gan_G=f'{sum(self.losses["gan"]["G"]) / (len(self.losses["gan"]["G"]) + 1e-12):.4f}')
+                             gan_G=f'{sum(self.losses["gan"]["G"]) / (len(self.losses["gan"]["G"]) + 1e-12):.4f}',
+                             clf_D=f'{sum(self.losses["clf"]["D"]) / (len(self.losses["clf"]["D"]) + 1e-12):.4f}',
+                             clf_G=f'{sum(self.losses["clf"]["G"]) / (len(self.losses["clf"]["G"]) + 1e-12):.4f}')
 
         for model_name in self.schedulers.keys():
             self.schedulers[model_name].step()
@@ -84,16 +91,18 @@ class MAETrainer(BaseTrainer):
         # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
         for data, labels, _ in pbar:
             pbar.set_description(f'Validating model at epoch {epoch}... ')
-            rec_loss, gan_loss = self.model('mae_inference', data, labels)
+            rec_loss, gan_loss, clf_loss = self.model('mae_inference', data, labels)
             self.losses['rec']['val'].append(rec_loss.item())
             self.losses['gan']['val'].append(gan_loss.item())
+            self.losses['clf']['val'].append(clf_loss.item())
             pbar.set_postfix(rec=f'{sum(self.losses["rec"]["val"]) / (len(self.losses["rec"]["val"]) + 1e-12):.4f}',
-                             gan=f'{sum(self.losses["gan"]["val"]) / (len(self.losses["gan"]["val"]) + 1e-12):.4f}')
+                             gan=f'{sum(self.losses["gan"]["val"]) / (len(self.losses["gan"]["val"]) + 1e-12):.4f}',
+                             clf=f'{sum(self.losses["clf"]["val"]) / (len(self.losses["clf"]["val"]) + 1e-12):.4f}')
 
     def _train_generator_once(self, data, labels):
         self.optimizers['G'].zero_grad()
-        rec_loss, gan_loss = self.model('mae_generator', data, labels)
-        g_loss = gan_loss + rec_loss * self.loss_weights['rec']
+        rec_loss, gan_loss, clf_loss = self.model('mae_generator', data, labels)
+        g_loss = gan_loss + rec_loss * self.loss_weights['rec'] + clf_loss * self.loss_weights['clf_G']
         self.scaler.scale(g_loss).backward()
         self.scaler.step(self.optimizers['G'])
         self.scaler.update()
@@ -101,14 +110,16 @@ class MAETrainer(BaseTrainer):
         # self.optimizers['G'].step()
         self.losses['rec']['train'].append(rec_loss.item())
         self.losses['gan']['G'].append(gan_loss.item())
+        self.losses['clf']['G'].append(clf_loss.item())
 
     def _train_discriminator_once(self, data, labels):
         self.optimizers['D'].zero_grad()
-        gan_loss = self.model('mae_discriminator', data, labels)
-        d_loss = gan_loss
+        gan_loss, clf_loss = self.model('mae_discriminator', data, labels)
+        d_loss = gan_loss + clf_loss * self.loss_weights['clf_D']
         self.scaler.scale(d_loss).backward()
         self.scaler.step(self.optimizers['D'])
         self.scaler.update()
         # d_loss.backward()
         # self.optimizers['D'].step()
         self.losses['gan']['D'].append(gan_loss.item())
+        self.losses['clf']['D'].append(clf_loss.item())

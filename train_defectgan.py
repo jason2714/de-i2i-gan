@@ -49,6 +49,9 @@ NUM_SAMPLES = {"defects": None,
 def train():
     opt = TrainOptions().parse()
     dataset_cls = find_dataset_using_name(opt.dataset_name)
+    # initial args from dataset
+    opt.clf_loss_type = dataset_cls.clf_loss_type
+
     # TODO calculate dataset's mean and std
     train_transform = transforms.Compose([
         transforms.Resize(int(opt.image_size * 1.5)),
@@ -108,7 +111,8 @@ def train():
     train_loaders['background'] = iter(train_loaders['background'])
     val_loaders['background'] = iter(val_loaders['background'])
 
-    trainer = find_trainer_using_model_name(opt.model)(opt, len(train_loaders['defects']))
+    opt.iters_per_epoch = len(train_loaders['defects'])
+    trainer = find_trainer_using_model_name(opt.model)(opt)
     trainer.train(train_loaders, val_loaders)
 
 

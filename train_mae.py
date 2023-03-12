@@ -20,6 +20,9 @@ VAL_NUM_SAMPLES = {"fusion": None,
 def train():
     opt = PreTrainOptions().parse()
     dataset_cls = find_dataset_using_name(opt.dataset_name)
+    # initial args from dataset
+    opt.clf_loss_type = dataset_cls.clf_loss_type
+
     # TODO calculate dataset's mean and std
     train_transform = transforms.Compose([
         transforms.Resize(int(opt.image_size * 1.5)),
@@ -75,7 +78,8 @@ def train():
     val_loaders['background'] = iter(val_loaders['background'])
     val_loaders['defects'] = iter(val_loaders['defects'])
 
-    trainer = find_trainer_using_model_name('mae')(opt, len(train_loaders['fusion']), dataset_cls.DATA_TYPE)
+    opt.iters_per_epoch = len(train_loaders['fusion'])
+    trainer = find_trainer_using_model_name('mae')(opt, dataset_cls.DATA_TYPE)
     trainer.train(train_loaders, val_loaders)
 
 

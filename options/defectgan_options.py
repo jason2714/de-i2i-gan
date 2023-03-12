@@ -83,6 +83,7 @@ class TrainOptions(DefectGanBaseOptions, BaseTrainOptions):
         parser.add_argument('--lr_decay', type=float, default=5e-3, help='learning rate decay for optimizer')
         parser.add_argument('--loss_weight', type=int, nargs='+', default=[2, 5, 5, 5, 1],
                             help='aggregation weight for each loss, [cls_d, cls_g, rec, sd_cyc, sd_con]')
+        # parser.add_argument('--clf_loss_type', type=str, default='bce', help='loss type of classifier [bce|cce]')
 
         # parser.add_argument('--niter_decay', type=int, default=0,
         #                     help='# of iter to linearly decay learning rate to zero')
@@ -140,8 +141,8 @@ class PreTrainOptions(DefectGanBaseOptions, BaseTrainOptions):
                                  'e.g. [lr] or [lr_d, lr_g]')
         parser.add_argument('--scheduler', type=str, default='cos', help='type of scheduler [step|exp|cos]')
         parser.add_argument('--lr_decay', type=float, default=0.05, help='learning rate decay for optimizer')
-        parser.add_argument('--loss_weight', type=int, nargs='+', default=[10],
-                            help='aggregation weight for each loss, [rec]')
+        parser.add_argument('--loss_weight', type=int, nargs='+', default=[10, 3, 1],
+                            help='aggregation weight for each loss, [rec, cls_d, cls_g]')
         parser.add_argument('--num_critics', type=int, default=1,
                             help='number of discriminator iterations per generator iterations.')
 

@@ -8,6 +8,7 @@ from data.codebrim.create_annos import create_annos
 
 class CodeBrimDataset(Dataset):
     DATA_TYPE = ['defects', 'background']
+    clf_loss_type = 'bce'
 
     def __init__(self, opt, phase, data_type, transform=None):
         """
@@ -37,6 +38,8 @@ class CodeBrimDataset(Dataset):
         data_dirs = [opt.data_dir / opt.dataset_name / phase / crt_data_type for crt_data_type in data_types]
         self.data = [(filename, fn_label_map[filename.name])
                      for data_dir in data_dirs for filename in data_dir.iterdir() if filename.suffix == '.png']
+        # import random
+        # self.data = random.choices(self.data, k=int(len(self.data) * 0.1))
         self.data.sort()
         self.len = len(self.data)
 
@@ -49,3 +52,4 @@ class CodeBrimDataset(Dataset):
 
     def __len__(self):
         return self.len
+
