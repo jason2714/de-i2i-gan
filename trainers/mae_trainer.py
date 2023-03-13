@@ -36,6 +36,8 @@ class MAETrainer(BaseTrainer):
         for loss_type in self.loss_types:
             writer.add_scalars(f'Losses/{loss_type}', {key: sum(value) / (len(value) + 1e-12)
                                                        for key, value in self.losses[loss_type].items()}, epoch)
+        for model_name in self.schedulers.keys():
+            writer.add_scalar(f'Lr/{model_name}', self.schedulers[model_name].get_last_lr()[0], epoch)
         # for loss_type, values in self.losses.items():
         #     writer.add_scalar(f'Losses/{loss_type}', sum(values) / (len(values) + 1e-12), epoch)
 
@@ -62,12 +64,14 @@ class MAETrainer(BaseTrainer):
         writer.close()
 
     def _train_epoch(self, data_loaders, epoch):
+        lrs = ', '.join([f'lr_{model_name}: {self.schedulers[model_name].get_last_lr()[0]:.5f}'
+                         for model_name in self.schedulers.keys()])
         pbar = tqdm(data_loaders['fusion'], colour='MAGENTA')
         # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
         for bg_data, bg_labels, _ in pbar:
             self.iters += 1
             pbar.set_description(f'Epoch: [{epoch}/{self.opt.num_epochs}], '
-                                 f'Iter: [{self.iters}/{self.opt.num_iters}]')
+                                 f'Iter: [{self.iters}/{self.opt.num_iters}], {lrs}')
 
             self._train_discriminator_once(bg_data, bg_labels)
             if self.iters % self.opt.num_critics == 0:
