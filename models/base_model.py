@@ -50,6 +50,10 @@ class BaseModel:
         for network_name, network in self.networks.items():
             load_network(network, network_name, epoch, self.opt)
 
+    def load_network(self, network_name, epoch):
+        print(f"load net_{network_name}'s weights from epoch {epoch}")
+        load_network(self.networks[network_name], network_name, epoch, self.opt)
+
     def __repr__(self):
         model_repr = ''
         for network_name, network in self.networks.items():

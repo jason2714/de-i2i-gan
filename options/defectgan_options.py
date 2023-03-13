@@ -145,6 +145,8 @@ class PreTrainOptions(DefectGanBaseOptions, BaseTrainOptions):
                             help='aggregation weight for each loss, [rec, cls_d, cls_g]')
         parser.add_argument('--num_critics', type=int, default=1,
                             help='number of discriminator iterations per generator iterations.')
+        parser.add_argument('--split_training', action='store_true', default=False,
+                            help='Whether to train each network individually')
 
         # for MAE
         parser.add_argument('--patch_size', type=int, default=8, help='masked patch size, must be power of 2')
