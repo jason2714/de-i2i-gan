@@ -106,6 +106,8 @@ class TestOptions(DefectGanBaseOptions, BaseTestOptions):
         parser.add_argument('--cal_fid', action='store_true', default=False,
                             help='whether to calculate FID score or not')
         parser.add_argument('--save_img_grid', action='store_true', default=False,
+                            help='whether to save generated partial labeled image grids or not')
+        parser.add_argument('--save_img', action='store_true', default=False,
                             help='whether to save generated image grids or not')
 
         return parser

@@ -29,7 +29,6 @@ DATATYPE = ["defects", "background"]
 #         shutil.copyfile(file_path, base_dir / file_path.name)
 
 
-
 @torch.no_grad()
 def main():
     fix_rand_seed()
@@ -103,9 +102,27 @@ def main():
             output_path = output_dir / f'{idx2label[label_idx]}.png'
             save_image(df_grid, output_path)
 
+    if opt.save_img:
+        output_dir = opt.results_dir / opt.name / 'images'
+        output_dir.mkdir(parents=True, exist_ok=True)
+        bg_data, _, _ = next(test_loaders['background'])
+
+        # generate single defect image grid
+        labels = torch.eye(opt.label_nc)[1:]
+        df_grid = model('generate_grid', bg_data, labels, img_only=True)
+        single_output_path = output_dir / f'Single.png'
+        save_image(df_grid, single_output_path)
+
+        # generate multiple defect image grid
+        _, df_labels, _ = next(iter(test_loaders['defects']))
+        multi_df_grid = model('generate_grid', bg_data, df_labels, img_only=True)
+        multi_output_path = output_dir / f'Multiple.png'
+        save_image(multi_df_grid, multi_output_path)
+
 
 if __name__ == '__main__':
     main()
     '''
     python test_defectgan.py --data_dir A:/research/data --batch_size 4 --name org --save_img_grid
+    python test_defectgan.py --data_dir A:/research/data --batch_size 6 --name mae_l1 --save_img --add_noise --use_spectral
     '''

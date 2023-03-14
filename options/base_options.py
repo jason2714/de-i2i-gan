@@ -82,7 +82,7 @@ class BaseOptions:
         # model_option_setter = models.get_option_setter(model_name)
         # parser = model_option_setter(parser, self.is_train)
         # set load_model_name to name if load_model_name is not set
-        if opt.continue_training:
+        if not self.is_train or opt.continue_training:
             parser.set_defaults(load_model_name=opt.name)
         # if opt.load_model_name is None:
         #     parser.set_defaults(load_model_name=opt.name)

@@ -30,8 +30,9 @@ class DefectGanModel(BaseModel):
                                            num_layers=opt.num_layers,
                                            ndf=opt.ndf,
                                            use_spectral=opt.use_spectral).to(opt.device, non_blocking=True)
-        assert opt.clf_loss_type is not None, 'clf_loss_type should be initialized in dataset'
-        self.clf_loss_type = opt.clf_loss_type
+        if self.opt.is_train:
+            assert opt.clf_loss_type is not None, 'clf_loss_type should be initialized in dataset'
+            self.clf_loss_type = opt.clf_loss_type
 
     def __call__(self, mode, data, labels, df_data=None, img_only=False):
         # for mae
