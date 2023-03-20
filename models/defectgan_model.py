@@ -93,19 +93,19 @@ class DefectGanModel(BaseModel):
         rec_loss = self._cal_loss(predicted_imgs, imgs, 'l1')
         # rec_loss = self._cal_loss(predicted_imgs * (1 - masks), imgs * (1 - masks), 'mse') / self.opt.mask_ratio
 
-        fake_src, fake_cls = self.netD(predicted_imgs)
-        clf_loss = self._cal_loss(fake_cls, labels, self.clf_loss_type)
-        return rec_loss, torch.zeros([], requires_grad=False), clf_loss
+        # fake_src, fake_cls = self.netD(predicted_imgs)
+        # clf_loss = self._cal_loss(fake_cls, labels, self.clf_loss_type)
+        # return rec_loss, torch.zeros([], requires_grad=False), clf_loss
 
-        # if self.opt.split_training:
-        #     return rec_loss, torch.zeros([], requires_grad=False), torch.zeros([], requires_grad=False)
-        # else:
-        #     # discriminator
-        #     fake_src, fake_cls = self.netD(predicted_imgs)
-        #     fake_labels = torch.ones_like(fake_src, dtype=torch.float).to(self.netD.device, non_blocking=True)
-        #     gan_loss = self._cal_loss(fake_src, fake_labels, 'bce')
-        #     clf_loss = self._cal_loss(fake_cls, labels, self.clf_loss_type)
-        #     return rec_loss, gan_loss, clf_loss
+        if self.opt.split_training:
+            return rec_loss, torch.zeros([], requires_grad=False), torch.zeros([], requires_grad=False)
+        else:
+            # discriminator
+            fake_src, fake_cls = self.netD(predicted_imgs)
+            fake_labels = torch.ones_like(fake_src, dtype=torch.float).to(self.netD.device, non_blocking=True)
+            gan_loss = self._cal_loss(fake_src, fake_labels, 'bce')
+            clf_loss = self._cal_loss(fake_cls, labels, self.clf_loss_type)
+            return rec_loss, gan_loss, clf_loss
 
     def _compute_mae_discriminator_loss(self, imgs, labels):
         imgs, labels = imgs.to(self.netG.device, non_blocking=True), labels.to(self.netG.device, non_blocking=True)
@@ -114,23 +114,23 @@ class DefectGanModel(BaseModel):
         real_src, real_cls = self.netD(imgs)
         clf_loss = self._cal_loss(real_cls, labels, self.clf_loss_type)
 
-        return torch.zeros([], requires_grad=False), clf_loss
+        # return torch.zeros([], requires_grad=False), clf_loss
 
-        # if self.opt.split_training:
-        #     return torch.zeros([], requires_grad=False), clf_loss
-        # else:
-        #     # fake
-        #     with torch.no_grad():
-        #         predicted_imgs, masks = self._repair_mask(imgs, labels)
-        #     predicted_imgs.requires_grad = True
-        #     fake_src, _ = self.netD(predicted_imgs.detach_())
-        #     fake_labels = torch.zeros_like(fake_src, dtype=torch.float).to(self.netD.device, non_blocking=True)
-        #     real_labels = torch.ones_like(real_src, dtype=torch.float).to(self.netD.device, non_blocking=True)
-        #
-        #     # gan loss
-        #     gan_loss = {'fake': self._cal_loss(fake_src, fake_labels, 'bce'),
-        #                 'real': self._cal_loss(real_src, real_labels, 'bce')}
-        #     return torch.stack(list(gan_loss.values())).mean(), clf_loss
+        if self.opt.split_training:
+            return torch.zeros([], requires_grad=False), clf_loss
+        else:
+            # fake
+            with torch.no_grad():
+                predicted_imgs, masks = self._repair_mask(imgs, labels)
+            predicted_imgs.requires_grad = True
+            fake_src, _ = self.netD(predicted_imgs.detach_())
+            fake_labels = torch.zeros_like(fake_src, dtype=torch.float).to(self.netD.device, non_blocking=True)
+            real_labels = torch.ones_like(real_src, dtype=torch.float).to(self.netD.device, non_blocking=True)
+
+            # gan loss
+            gan_loss = {'fake': self._cal_loss(fake_src, fake_labels, 'bce'),
+                        'real': self._cal_loss(real_src, real_labels, 'bce')}
+            return torch.stack(list(gan_loss.values())).mean(), clf_loss
 
     def _compute_generator_loss(self, bg_data, df_labels, df_data):
         bg_data, df_labels, df_data = bg_data.to(self.netG.device, non_blocking=True), \
