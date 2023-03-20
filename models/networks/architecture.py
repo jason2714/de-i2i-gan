@@ -375,12 +375,12 @@ class UnetBlock(nn.Module):
         self.submodule = submodule
 
     def forward(self, x, seg):
-        # TODO fix the problem of Sequential with two args
         feat = self.down_conv(x, seg)
         if self.submodule is not None:
             feat = self.submodule(feat, seg)
         out = self.up_conv(feat, seg)
         if self.skip_conn:  # add skip connections
+            # TODO fix the nan bug
             return torch.cat([x, out], 1)
         else:
             return out

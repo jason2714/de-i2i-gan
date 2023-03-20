@@ -2,9 +2,8 @@ import random
 import numpy as np
 import torch
 import logging
-from pathlib import Path
-import torchvision
-from torch import nn
+import torch.nn.functional as F
+
 
 def use_gpu(gpu_ids=0):
     use_cuda = torch.cuda.is_available()
@@ -48,9 +47,22 @@ def generate_mask(image_size, patch_size, mask_ratio):
         input image_size: (b, c, h, w)
         output size: (b, 1, h, w)
     """
-    up_scale = nn.Upsample(scale_factor=patch_size, mode='nearest')
     height_size = image_size[2] // patch_size
     width_size = image_size[3] // patch_size
     mask = torch.bernoulli(torch.full((image_size[0], 1, height_size, width_size), (1 - mask_ratio)))
 
-    return up_scale(mask)
+    return F.interpolate(mask, scale_factor=patch_size, mode='nearest')
+
+
+def generate_shifted_mask(image_size, patch_size, mask_ratio):
+    """
+        input image_size: (b, c, h, w)
+        output size: (b, 1, h, w)
+    """
+    img_h, img_w = image_size[2], image_size[3]
+    h_shift = torch.randint(low=0, high=patch_size, size=(1,))
+    w_shift = torch.randint(low=0, high=patch_size, size=(1,))
+    extend_image_size = (*image_size[:2], img_h + patch_size, img_w + patch_size)
+    extend_mask = generate_mask(extend_image_size, patch_size, mask_ratio)
+    mask = extend_mask[:, :, h_shift: h_shift + img_h, w_shift: w_shift + img_w]
+    return mask

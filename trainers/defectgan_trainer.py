@@ -43,9 +43,8 @@ class DefectGanTrainer(BaseTrainer):
         for loss_type in self.loss_types:
             writer.add_scalars(f'Losses/{loss_type}', {key: sum(value) / (len(value) + 1e-12)
                                                        for key, value in self.losses[loss_type].items()}, epoch)
-
-        for model_name in self.schedulers.keys():
-            writer.add_scalar(f'Lr/{model_name}', self.schedulers[model_name].get_last_lr()[0], epoch)
+        writer.add_scalars(f'Lr', {f'net_{model_name}': self.schedulers[model_name].get_last_lr()[0]
+                                   for model_name in self.schedulers.keys()}, epoch)
         # for discriminator outputs
         # writer.add_scalars(f'D(x)', {key: sum(value) / len(value)
         #                              for key, value in self.losses.items()

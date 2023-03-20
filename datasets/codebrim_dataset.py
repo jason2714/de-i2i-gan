@@ -36,10 +36,15 @@ class CodeBrimDataset(Dataset):
 
         # initialize data with format list of (filename, label)
         data_dirs = [opt.data_dir / opt.dataset_name / phase / crt_data_type for crt_data_type in data_types]
+        # data_dirs = [opt.data_dir / opt.dataset_name / phase / crt_data_type for crt_data_type in data_types]
         self.data = [(filename, fn_label_map[filename.name])
                      for data_dir in data_dirs for filename in data_dir.iterdir() if filename.suffix == '.png']
-        # import random
-        # self.data = random.choices(self.data, k=int(len(self.data) * 0.1))
+        # labels = [fn_label_map[filename.name]
+        #           for data_dir in data_dirs for filename in data_dir.iterdir() if filename.suffix == '.png']
+        # import numpy as np
+        # np_labels = np.array(labels)
+        # print(np_labels.sum(axis=0))
+        # exit()
         self.data.sort()
         self.len = len(self.data)
 

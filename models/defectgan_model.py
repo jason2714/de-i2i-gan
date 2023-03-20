@@ -6,8 +6,9 @@ import math
 from torchvision.utils import make_grid
 import numpy as np
 import cv2
-from utils.util import generate_mask
+from utils.util import generate_mask, generate_shifted_mask
 from torch import autocast
+import torchvision.transforms as transforms
 
 
 class DefectGanModel(BaseModel):
@@ -92,15 +93,19 @@ class DefectGanModel(BaseModel):
         rec_loss = self._cal_loss(predicted_imgs, imgs, 'l1')
         # rec_loss = self._cal_loss(predicted_imgs * (1 - masks), imgs * (1 - masks), 'mse') / self.opt.mask_ratio
 
-        if self.opt.split_training:
-            return rec_loss, torch.zeros([], requires_grad=False), torch.zeros([], requires_grad=False)
-        else:
-            # discriminator
-            fake_src, fake_cls = self.netD(predicted_imgs)
-            fake_labels = torch.ones_like(fake_src, dtype=torch.float).to(self.netD.device, non_blocking=True)
-            gan_loss = self._cal_loss(fake_src, fake_labels, 'bce')
-            clf_loss = self._cal_loss(fake_cls, labels, self.clf_loss_type)
-            return rec_loss, gan_loss, clf_loss
+        fake_src, fake_cls = self.netD(predicted_imgs)
+        clf_loss = self._cal_loss(fake_cls, labels, self.clf_loss_type)
+        return rec_loss, torch.zeros([], requires_grad=False), clf_loss
+
+        # if self.opt.split_training:
+        #     return rec_loss, torch.zeros([], requires_grad=False), torch.zeros([], requires_grad=False)
+        # else:
+        #     # discriminator
+        #     fake_src, fake_cls = self.netD(predicted_imgs)
+        #     fake_labels = torch.ones_like(fake_src, dtype=torch.float).to(self.netD.device, non_blocking=True)
+        #     gan_loss = self._cal_loss(fake_src, fake_labels, 'bce')
+        #     clf_loss = self._cal_loss(fake_cls, labels, self.clf_loss_type)
+        #     return rec_loss, gan_loss, clf_loss
 
     def _compute_mae_discriminator_loss(self, imgs, labels):
         imgs, labels = imgs.to(self.netG.device, non_blocking=True), labels.to(self.netG.device, non_blocking=True)
@@ -109,21 +114,23 @@ class DefectGanModel(BaseModel):
         real_src, real_cls = self.netD(imgs)
         clf_loss = self._cal_loss(real_cls, labels, self.clf_loss_type)
 
-        if self.opt.split_training:
-            return torch.zeros([], requires_grad=False), clf_loss
-        else:
-            # fake
-            with torch.no_grad():
-                predicted_imgs, masks = self._repair_mask(imgs, labels)
-            predicted_imgs.requires_grad = True
-            fake_src, _ = self.netD(predicted_imgs.detach_())
-            fake_labels = torch.zeros_like(fake_src, dtype=torch.float).to(self.netD.device, non_blocking=True)
-            real_labels = torch.ones_like(real_src, dtype=torch.float).to(self.netD.device, non_blocking=True)
+        return torch.zeros([], requires_grad=False), clf_loss
 
-            # gan loss
-            gan_loss = {'fake': self._cal_loss(fake_src, fake_labels, 'bce'),
-                        'real': self._cal_loss(real_src, real_labels, 'bce')}
-            return torch.stack(list(gan_loss.values())).mean(), clf_loss
+        # if self.opt.split_training:
+        #     return torch.zeros([], requires_grad=False), clf_loss
+        # else:
+        #     # fake
+        #     with torch.no_grad():
+        #         predicted_imgs, masks = self._repair_mask(imgs, labels)
+        #     predicted_imgs.requires_grad = True
+        #     fake_src, _ = self.netD(predicted_imgs.detach_())
+        #     fake_labels = torch.zeros_like(fake_src, dtype=torch.float).to(self.netD.device, non_blocking=True)
+        #     real_labels = torch.ones_like(real_src, dtype=torch.float).to(self.netD.device, non_blocking=True)
+        #
+        #     # gan loss
+        #     gan_loss = {'fake': self._cal_loss(fake_src, fake_labels, 'bce'),
+        #                 'real': self._cal_loss(real_src, real_labels, 'bce')}
+        #     return torch.stack(list(gan_loss.values())).mean(), clf_loss
 
     def _compute_generator_loss(self, bg_data, df_labels, df_data):
         bg_data, df_labels, df_data = bg_data.to(self.netG.device, non_blocking=True), \
@@ -151,8 +158,9 @@ class DefectGanModel(BaseModel):
         # clf loss
         nm_labels = torch.zeros_like(fake_normals_cls, dtype=torch.float).to(self.netD.device, non_blocking=True)
         nm_labels[:, 0] = 1
-        clf_loss = {'fake_defect': self._cal_loss(fake_defects_cls, df_labels, 'bce'),
-                    'fake_normal': self._cal_loss(fake_normals_cls, nm_labels, 'bce')}
+        clf_loss = {'fake_defect': self._cal_loss(fake_defects_cls, df_labels, self.clf_loss_type),
+                    'fake_normal': self._cal_loss(fake_normals_cls, nm_labels, self.clf_loss_type)}
+        # print(clf_loss)
 
         # rec loss
         rec_loss = {'defect': self._cal_loss(recover_defects, df_data, 'l1'),
@@ -213,8 +221,9 @@ class DefectGanModel(BaseModel):
         # problem
         nm_labels = torch.zeros_like(real_normals_cls, dtype=torch.float).to(self.netD.device, non_blocking=True)
         nm_labels[:, 0] = 1
-        clf_loss = {'real_defect': self._cal_loss(real_defects_cls, df_labels, 'bce'),
-                    'real_normal': self._cal_loss(real_normals_cls, nm_labels, 'bce')}
+        clf_loss = {'real_defect': self._cal_loss(real_defects_cls, df_labels, self.clf_loss_type),
+                    'real_normal': self._cal_loss(real_normals_cls, nm_labels, self.clf_loss_type)}
+        # exit()
         return torch.stack(list(gan_loss.values())).mean(), \
                torch.stack(list(clf_loss.values())).mean()
 
@@ -227,29 +236,30 @@ class DefectGanModel(BaseModel):
     @torch.no_grad()
     def _generate_fake_grids(self, bg_data, labels, img_only=False):
         df_images = []
+        bg_data = bg_data.to(self.netG.device)
         for data in bg_data:
-            df_images.append(data / 2 + 0.5)
-            data = data.unsqueeze(0).to(self.netG.device)
-            df_data, df_prob = self._generate_fake(data.expand(labels.size(0), -1, -1, -1), labels)
+            data = data.unsqueeze(0)
+            df_images.append(data.add(1).div(2))
+            df_data, df_prob = self._generate_fake(data.repeat(labels.size(0), 1, 1, 1), labels)
             if img_only:
-                df_data = (df_data / 2 + 0.5).detach().cpu()
-                for slice_data in df_data:
-                    df_images += [slice_data]
+                df_data.add_(1).div_(2)
+                df_images.append(df_data)
             else:
                 if self.opt.cycle_gan:
                     foreground = df_data
                 else:
-                    foreground = torch.clamp((df_data - data * (1 - df_prob)) / (df_prob + 1e-8), min=-1, max=1)
-                df_data = (df_data / 2 + 0.5).detach().cpu()
-                foreground = (foreground / 2 + 0.5).detach().cpu()
-                df_prob = df_prob.detach().cpu()
-                for idx, (slice_data, slice_prob, slice_foreground) in enumerate(zip(df_data, df_prob, foreground)):
+                    foreground = df_data.sub(data.mul(1 - df_prob)).div(df_prob.add(1e-8)).clamp_(-1, 1)
+                df_data.add_(1).div_(2)
+                foreground.add_(1).div_(2)
+                new_df_prob = df_prob.repeat(1, 3, 1, 1)
+                for idx, slice_prob in enumerate(df_prob.cpu()):
                     slice_prob = slice_prob.squeeze(0)
                     heatmap = cv2.cvtColor(cv2.applyColorMap(np.uint8(255 * slice_prob), cv2.COLORMAP_JET),
                                            cv2.COLOR_BGR2RGB)
-                    heatmap = torch.from_numpy(heatmap.transpose(2, 0, 1)) / 255.
-                    df_images += [slice_data, heatmap, slice_foreground]
-        df_images = torch.stack(df_images, dim=0)
+                    new_df_prob[idx, :] = torch.from_numpy(heatmap.transpose(2, 0, 1)).to(self.netG.device)
+                new_df_prob.div_(255.)
+                df_images.append(torch.stack([df_data, new_df_prob, foreground], dim=1).flatten(0, 1))
+        df_images = torch.cat([*df_images], dim=0)
         nrow = 1 + (labels.size(0) if img_only else 3 * labels.size(0))
         df_grid = make_grid(df_images, nrow=nrow)
         return df_grid
@@ -265,7 +275,7 @@ class DefectGanModel(BaseModel):
         # generate grid
         grid_imgs = torch.stack([imgs, combine_imgs, masked_imgs, predicted_imgs, predicted_masked_imgs], dim=0)
         grid_imgs = grid_imgs.transpose(0, 1).reshape(-1, *imgs.size()[1:])
-        grid_imgs = (grid_imgs / 2 + 0.5).detach().cpu()
+        grid_imgs.add_(1).div_(2)
         nrow = 5
 
         return make_grid(grid_imgs, nrow=nrow)
@@ -273,7 +283,8 @@ class DefectGanModel(BaseModel):
     def _repair_mask(self, imgs, labels):
         # seg = self._expand_seg(torch.zeros_like(labels))
         seg = self._expand_seg(labels)
-        masks = generate_mask(imgs.size(), self.opt.patch_size, self.opt.mask_ratio)
+        # masks = generate_mask(imgs.size(), self.opt.patch_size, self.opt.mask_ratio)
+        masks = generate_shifted_mask(imgs.size(), self.opt.patch_size, self.opt.mask_ratio)
         masks = masks.to(self.netG.device, non_blocking=True)
         masked_imgs = imgs * masks
 

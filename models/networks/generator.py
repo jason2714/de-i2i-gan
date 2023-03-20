@@ -194,6 +194,20 @@ class DefectGanGenerator(BaseNetwork):
 
         if self.skip_conn:
             feat = self.unet_blk(feat, labels)
+            # if feat.isnan().any():
+            #     print(feat.shape)
+            #     if feat[0].isnan().any():
+            #         print(feat[0, :64].isnan().any())
+            #         print(feat[0, 64:].isnan().all())
+            #     if feat[1].isnan().any():
+            #         print(feat[1, :64].isnan().any())
+            #         print(feat[1, 64:].isnan().all())
+            #     if feat[2].isnan().any():
+            #         print(feat[2, :64].isnan().any())
+            #         print(feat[2, 64:].isnan().all())
+            #     if feat[3].isnan().any():
+            #         print(feat[3, :64].isnan().any())
+            #         print(feat[3, 64:].isnan().all())
         else:
             # original
             for enc_blk in self.enc_blk:
@@ -208,7 +222,6 @@ class DefectGanGenerator(BaseNetwork):
 
             for dec_blk in self.dec_blk:
                 feat = dec_blk(feat, labels)
-
         foreground = self.foreground_head(feat)
         spatial_prob = self.distribution_head(feat)
         output = x * (1 - spatial_prob) + foreground * spatial_prob
