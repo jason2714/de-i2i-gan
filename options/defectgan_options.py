@@ -109,6 +109,8 @@ class TestOptions(DefectGanBaseOptions, BaseTestOptions):
                             help='whether to save generated partial labeled image grids or not')
         parser.add_argument('--save_img', action='store_true', default=False,
                             help='whether to save generated image grids or not')
+        parser.add_argument('--cal_clf', action='store_true', default=False,
+                            help='whether to calculate classifier accuracy or not')
 
         return parser
 

@@ -31,7 +31,7 @@ class DefectGanModel(BaseModel):
                                            num_layers=opt.num_layers,
                                            ndf=opt.ndf,
                                            use_spectral=opt.use_spectral).to(opt.device, non_blocking=True)
-        if self.opt.is_train:
+        if self.opt.is_train or hasattr(opt, 'clf_loss_type'):
             assert opt.clf_loss_type is not None, 'clf_loss_type should be initialized in dataset'
             self.clf_loss_type = opt.clf_loss_type
 
@@ -81,6 +81,10 @@ class DefectGanModel(BaseModel):
                 self.netD.eval()
                 self.netG.eval()
                 return self._generate_fake_grids(data, labels, img_only)
+            elif mode == 'inference_classifier':
+                self.netD.eval()
+                self.netG.eval()
+                return self._compute_clf_loss(data, labels)
             else:
                 raise ValueError(f"|mode {mode}| is invalid")
 
@@ -226,6 +230,15 @@ class DefectGanModel(BaseModel):
         # exit()
         return torch.stack(list(gan_loss.values())).mean(), \
                torch.stack(list(clf_loss.values())).mean()
+
+    def _compute_clf_loss(self, imgs, labels):
+        imgs, labels = imgs.to(self.netG.device, non_blocking=True), labels.to(self.netG.device, non_blocking=True)
+
+        _, df_logits = self.netD(imgs)
+
+        clf_loss = self._cal_loss(df_logits, labels, self.clf_loss_type)
+
+        return df_logits, clf_loss
 
     @torch.no_grad()
     def _generate_fake(self, data, labels):

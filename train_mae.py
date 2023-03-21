@@ -87,8 +87,8 @@ if __name__ == '__main__':
     fix_rand_seed()
     train()
     '''
-    python train_mae.py --data_dir A:/research/data --name mae --phase val --add_noise --use_spectral --lr 1.5e-4 5e-4
-    python train_mae.py --name mae_shrink_cycle_skip_l --phase val --add_noise --use_spectral --lr 1.5e-4 5e-4 --data_dir A:/research/data --cycle_gan --skip_conn
+    python train_mae.py --name mae --data_dir A:/research/data --phase val --add_noise --use_spectral --lr 1.5e-4 5e-4 --patch_size 16
+    python train_mae.py --name mae_shrink_cycle_skip_l --phase val --add_noise --use_spectral --lr 1.5e-4 5e-4 --data_dir A:/research/data --cycle_gan --skip_conn --patch_size 16
     python train_mae.py --name mae --continue_training --load_from_opt_file
     tensorboard --logdir log/mae --samples_per_plugin "images=100"
     '''

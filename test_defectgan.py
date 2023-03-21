@@ -15,18 +15,7 @@ import torch
 from metrics.fid_score import calculate_fid_from_model
 from torchvision.utils import save_image
 
-DATATYPE = ["defects", "background"]
-
-
-# def save_generated_images(opt, file_paths, fake_imgs):
-#     base_dir = opt.results_dir / opt.name / 'images'
-#     base_dir.mkdir(parents=True, exist_ok=True)
-#     for file_path, image_out in zip(file_paths, fake_imgs):
-#         file_path = Path(file_path)
-#         image_out = image_out.permute(1, 2, 0).cpu().numpy()
-#         image_out = np.uint8((image_out + 1) * 127.5)
-#         imageio.imsave(base_dir / f'{file_path.stem}_new_0.png', image_out)
-#         shutil.copyfile(file_path, base_dir / file_path.name)
+DATATYPE = ["defects", "background", "fusion"]
 
 
 @torch.no_grad()
@@ -34,8 +23,9 @@ def main():
     fix_rand_seed()
     # defectgan_options
     opt = TestOptions().parse()
-
     dataset_cls = find_dataset_using_name(opt.dataset_name)
+    opt.clf_loss_type = dataset_cls.clf_loss_type
+
     test_transform = transforms.Compose([
         transforms.Resize(opt.image_size),
         transforms.RandomCrop((opt.image_size, opt.image_size), pad_if_needed=True),
@@ -47,7 +37,8 @@ def main():
         for data_type in DATATYPE
     }
     NUM_SAMPLES = {"defects": opt.num_imgs,
-                   "background": int(1e10)}
+                   "background": int(1e10),
+                   "fusion": None}
     test_samplers = {
         data_type: RandomSampler(test_datasets[data_type], replacement=False, num_samples=NUM_SAMPLES[data_type])
         for data_type in DATATYPE
@@ -118,6 +109,21 @@ def main():
         multi_df_grid = model('generate_grid', bg_data, df_labels, img_only=True)
         multi_output_path = output_dir / f'Multiple.png'
         save_image(multi_df_grid, multi_output_path)
+
+    if opt.cal_clf:
+        data_loader = test_loaders['fusion']
+        acc = 0
+        loss = 0
+        pbar = tqdm(data_loader, colour='MAGENTA')
+        # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
+        for data, labels, _ in pbar:
+            pbar.set_description(f'Validating model ... ')
+            logits, clf_loss = model('inference_classifier', data, labels, img_only=True)
+            predictions = (torch.sigmoid(logits) >= 0.5).int().cpu()
+            acc += (predictions == labels).all(dim=1).sum()
+            loss += clf_loss.item()
+        print(f'Acc: {acc / len(data_loader.dataset):.3f} ({acc}/{len(data_loader.dataset)}), '
+              f'Loss: {loss / len(data_loader):.3f}')
 
 
 if __name__ == '__main__':
