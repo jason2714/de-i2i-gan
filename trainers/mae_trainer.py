@@ -22,6 +22,9 @@ class MAETrainer(BaseTrainer):
         # initial attributes for dataset
         self.data_types = data_types
 
+        # add mask_token's param
+        self.optimizers['G'].add_param_group({'params': self.model.mask_token.parameters()})
+
     def _init_lr(self, opt):
         assert len(opt.lr) in (1, 2), f'length of lr must be 1 or 2, not {len(opt.lr)}'
         self.lr = {'D': opt.lr[0],
@@ -47,6 +50,10 @@ class MAETrainer(BaseTrainer):
                 data, labels, _ = next(val_loaders[data_type])
                 repaired_grid = self.model('mae_generate_grid', data, labels)
                 writer.add_image(f'Images/{data_type}', repaired_grid, epoch)
+
+            # mask_token = self.model.mask_token.mask_token.detach().clone().squeeze(0)
+            # mask_token.clamp_(-1, 1).add_(1).div_(2)
+            # writer.add_image(f'Images/mask_token', mask_token, epoch)
 
     def train(self, train_loaders, val_loaders=None):
         """

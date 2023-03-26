@@ -94,3 +94,12 @@ class DefectGanDiscriminator(BaseNetwork):
         src_logits = self.src_clf(feat)
         cls_logits = self.cls_clf(feat)
         return src_logits, cls_logits.reshape((cls_logits.size(0), cls_logits.size(1)))
+
+
+class ViTClassifier(BaseNetwork):
+    def __init__(self, label_nc):
+        super().__init__()
+        self.clf = nn.Linear(768, label_nc)
+
+    def forward(self, x):
+        return self.clf(x)

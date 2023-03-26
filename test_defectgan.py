@@ -130,5 +130,5 @@ if __name__ == '__main__':
     main()
     '''
     python test_defectgan.py --data_dir A:/research/data --batch_size 4 --name org --save_img_grid
-    python test_defectgan.py --data_dir A:/research/data --batch_size 6 --name mae_l1 --save_img --add_noise --use_spectral
+    python test_defectgan.py --name mae_shrink_token_2 --data_dir A:/research/data --batch_size 32 --add_noise --use_spectral --npz_path A:\research\data\codebrim\test\defects00.npz
     '''

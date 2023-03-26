@@ -9,6 +9,7 @@ import cv2
 from utils.util import generate_mask, generate_shifted_mask
 from torch import autocast
 import torchvision.transforms as transforms
+from models.networks.architecture import MaskToken
 
 
 class DefectGanModel(BaseModel):
@@ -34,6 +35,9 @@ class DefectGanModel(BaseModel):
         if self.opt.is_train or hasattr(opt, 'clf_loss_type'):
             assert opt.clf_loss_type is not None, 'clf_loss_type should be initialized in dataset'
             self.clf_loss_type = opt.clf_loss_type
+
+        # learnable mask token
+        self.mask_token = MaskToken(opt).to(opt.device, non_blocking=True)
 
     def __call__(self, mode, data, labels, df_data=None, img_only=False):
         # for mae
@@ -298,8 +302,13 @@ class DefectGanModel(BaseModel):
         seg = self._expand_seg(labels)
         # masks = generate_mask(imgs.size(), self.opt.patch_size, self.opt.mask_ratio)
         masks = generate_shifted_mask(imgs.size(), self.opt.patch_size, self.opt.mask_ratio)
-        masks = masks.to(self.netG.device, non_blocking=True)
+        masks = masks.to(self.opt.device, non_blocking=True)
         masked_imgs = imgs * masks
+
+        # mean of unmasked
+        # img_mean = masked_imgs.mean(dim=(2, 3)) / self.opt.mask_ratio
+        # img_mean = img_mean.reshape(*img_mean.size()[:2], 1, 1)
+        masked_imgs = self.mask_token(masked_imgs, masks)
 
         predicted_imgs, _ = self.netG(masked_imgs, seg)
         return predicted_imgs, masks

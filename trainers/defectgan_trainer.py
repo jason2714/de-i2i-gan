@@ -119,6 +119,7 @@ class DefectGanTrainer(BaseTrainer):
         print(f'FID: {fid_value} at epoch {epoch}')
         self.metrics['fid'] = fid_value
 
+
     def _train_generator_once(self, bg_data, df_labels, df_data):
         self.optimizers['G'].zero_grad()
         gan_loss, clf_loss, rec_loss, sd_cyc_loss, sd_con_loss = \

@@ -431,3 +431,14 @@ class ResnetSubModule(nn.Module):
         for dec_res_blk in self.dec_res_blk:
             feat = dec_res_blk(feat, seg)
         return feat
+
+
+class MaskToken(torch.nn.Module):
+    def __init__(self, opt):
+        super().__init__()
+        self.mask_token = torch.nn.Parameter(torch.empty(1, opt.input_nc, opt.image_size, opt.image_size)
+                                             .normal_(mean=0, std=opt.init_variance))
+        # self.mask_token = torch.nn.Parameter(torch.empty(1, 1, 1, 1).normal_(mean=0, std=opt.init_variance))
+
+    def forward(self, x, masks):
+        return x + self.mask_token * (1 - masks)
