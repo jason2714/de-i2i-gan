@@ -64,5 +64,7 @@ class TestOptions(ViTBaseOptions, BaseTestOptions):
         BaseTestOptions.initialize(self, parser)
 
         # for testing
+        parser.add_argument('--save_embeddings', action='store_true', default=False,
+                            help='whether to save the embedding of the test images')
 
         return parser

@@ -36,13 +36,13 @@ class BaseModel:
         return networks
 
     def init_weights(self):
+        """
+            skip network initialized with name ends with _
+        """
         print(f"initialize model's parameters using {self.opt.init_type} with variance={self.opt.init_variance}")
-        for network in self.networks.values():
-            if type(network) == torch.nn.Linear:
-                torch.nn.init.kaiming_uniform_(network.weight)
-                network.bias.data.fill_(0.01)  # tots els bias a 0.01
-                print(type(network))
-            network.init_weights(self.opt.init_type, self.opt.init_variance)
+        for network_name, network in self.networks.items():
+            if not network_name.endswith('_'):
+                network.init_weights(self.opt.init_type, self.opt.init_variance)
 
     def save(self, epoch):
         # print(f"save model's weights with epoch {epoch}")

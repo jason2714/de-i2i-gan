@@ -86,7 +86,7 @@ class ViTTrainer(BaseTrainer):
         for data, labels, _ in pbar:
             num_data += self.opt.batch_size
             pbar.set_description(f'Validating model at epoch {epoch}... ')
-            logits, clf_loss = self.model(data, labels, inference=True)
+            logits, clf_loss = self.model('inference', data, labels)
             predictions = (torch.sigmoid(logits) >= 0.5).int().cpu()
             num_acc += (predictions == labels).all(dim=1).sum()
 
@@ -96,10 +96,12 @@ class ViTTrainer(BaseTrainer):
         self.metrics['acc']['val'] = num_acc / num_data
 
     def _train_classifier_once(self, data, labels):
-        self.optimizers['C'].zero_grad()
-        logits, clf_loss = self.model(data, labels)
+        for optimizer in self.optimizers.values():
+            optimizer.zero_grad()
+        logits, clf_loss = self.model('train', data, labels)
         self.scaler.scale(clf_loss).backward()
-        self.scaler.step(self.optimizers['C'])
+        for optimizer in self.optimizers.values():
+            self.scaler.step(optimizer)
         self.scaler.update()
         self.losses['clf']['train'].append(clf_loss.item())
 

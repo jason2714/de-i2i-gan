@@ -16,7 +16,8 @@ def arg_parse():
 
 def train():
     opt = arg_parse()
-    dataset_cls = find_dataset_using_name(opt.dataset_name)
+    # dataset_cls = find_dataset_using_name(opt.dataset_name)
+    dataset_cls = CodeBrimDataset
     opt.clf_loss_type = dataset_cls.clf_loss_type
 
     train_transform = transforms.Compose([
@@ -44,7 +45,7 @@ def train():
     val_dataset = dataset_cls(opt, phase='val', data_type='fusion', transform=val_transform)
     val_loader = DataLoader(val_dataset, batch_size=opt.batch_size, shuffle=False,
                             num_workers=4, worker_init_fn=worker_init_fn, pin_memory=True)
-    print(f'{len(val_loader.dataset)} images in train fusion set')
+    print(f'{len(val_loader.dataset)} images in val fusion set')
 
     opt.iters_per_epoch = len(train_loader)
     trainer = find_trainer_using_model_name(opt.model)(opt)
@@ -56,5 +57,5 @@ if __name__ == '__main__':
     train()
 
 """
-python train_clf.py --name vit --phase val --data_dir A:/research/data
+python train_vit.py --name vit --phase val --data_dir A:/research/data
 """
