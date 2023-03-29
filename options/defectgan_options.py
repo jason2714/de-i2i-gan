@@ -23,6 +23,7 @@ class DefectGanBaseOptions(BaseOptions):
         parser.add_argument('--batch_size', type=int, default=4, help='input batch size')
         parser.add_argument('--image_size', type=int, default=128, help='input image size')
         parser.add_argument('--label_nc', type=int, default=6, help='# of label classes')
+        parser.add_argument('--embed_nc', type=int, default=768, help='# of embedding classes, [768 | 1024]')
 
         # for generator
         # parser.add_argument('--netG', type=str, default='defectgan', help='selects model to use for netG (wgan)')

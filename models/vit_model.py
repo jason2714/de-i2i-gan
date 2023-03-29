@@ -9,15 +9,16 @@ from transformers import ViTForImageClassification
 class ViTModel(BaseModel):
     def __init__(self, opt):
         super().__init__(opt)
-        self.netC = ViTClassifier(opt.label_nc).to(opt.device)
-        self.netViT_ = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224',
+        if opt.model_size == 'base':
+            input_nc = 768
+        elif opt.model_size == 'large':
+            input_nc = 1024
+        else:
+            raise NotImplementedError(f"model size {opt.model_size} is not implemented")
+        self.netC = ViTClassifier(input_nc, opt.label_nc).to(opt.device)
+        self.netViT_ = ViTForImageClassification.from_pretrained(f'google/vit-{opt.model_size}-patch16-224',
                                                                  output_hidden_states=True).to(opt.device)
-
-        # self._netViT_ = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224',
-        #                                                            output_hidden_states=True).to(opt.device)
-        # self._netViT_.eval()
-        # for param in self._netViT_.parameters():
-        #     param.requires_grad = False
+        self.netViT_.requires_grad_(False)
 
         if self.opt.is_train or hasattr(opt, 'clf_loss_type'):
             assert opt.clf_loss_type is not None, 'clf_loss_type should be initialized in dataset'
@@ -31,7 +32,8 @@ class ViTModel(BaseModel):
                 return self._compute_classifier_loss(data, labels)
         elif mode == 'train':
             self.netC.train()
-            self.netViT_.train()
+            # self.netViT_.train()
+            self.netViT_.eval()
             return self._compute_classifier_loss(data, labels)
         elif mode == 'get_embedding':
             self.netC.eval()

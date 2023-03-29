@@ -23,6 +23,7 @@ class ViTBaseOptions(BaseOptions):
         parser.add_argument('--label_nc', type=int, default=6, help='# of label classes')
 
         # for model
+        parser.add_argument('--model_size', type=str, default='base', help='model size [base|large]')
         parser.add_argument('--init_type', type=str, default='normal',
                             help='network initialization [normal|xavier|kaiming|orthogonal]')
         parser.add_argument('--init_variance', type=float, default=0.02,
@@ -66,5 +67,11 @@ class TestOptions(ViTBaseOptions, BaseTestOptions):
         # for testing
         parser.add_argument('--save_embeddings', action='store_true', default=False,
                             help='whether to save the embedding of the test images')
+        parser.add_argument('--visualize_tsne', action='store_true', default=False,
+                            help='whether to visualize tsne')
+        parser.add_argument('--calc_classifier_acc', action='store_true', default=False,
+                            help='whether to calculate classifier accuracy')
+        parser.add_argument('--data_type', type=str, default='fusion',
+                            help='which datatype to use, [ defects | background | fusion ]')
 
         return parser

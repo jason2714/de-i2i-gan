@@ -17,21 +17,8 @@ class DefectGanModel(BaseModel):
         super().__init__(opt)
         image_size = opt.image_size
         assert image_size & (image_size - 1) == 0, 'Image size must be a power of 2'
-        self.netG = DefectGanGenerator(label_nc=opt.label_nc,
-                                       input_nc=opt.input_nc,
-                                       num_scales=opt.num_scales,
-                                       num_res=opt.num_res,
-                                       ngf=opt.ngf,
-                                       use_spectral=opt.use_spectral,
-                                       add_noise=opt.add_noise,
-                                       cycle_gan=opt.cycle_gan,
-                                       skip_conn=opt.skip_conn).to(opt.device, non_blocking=True)
-        self.netD = DefectGanDiscriminator(label_nc=opt.label_nc,
-                                           image_size=opt.image_size,
-                                           input_nc=opt.input_nc,
-                                           num_layers=opt.num_layers,
-                                           ndf=opt.ndf,
-                                           use_spectral=opt.use_spectral).to(opt.device, non_blocking=True)
+        self.netG = DefectGanGenerator(opt).to(opt.device, non_blocking=True)
+        self.netD = DefectGanDiscriminator(opt).to(opt.device, non_blocking=True)
         if self.opt.is_train or hasattr(opt, 'clf_loss_type'):
             assert opt.clf_loss_type is not None, 'clf_loss_type should be initialized in dataset'
             self.clf_loss_type = opt.clf_loss_type

@@ -39,25 +39,82 @@ def get_embeddings(data_loader, model):
     pbar = tqdm(data_loader, colour='MAGENTA')
     # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
     for data, labels, _ in pbar:
-        pbar.set_description(f'Aggregating Embeddings... ')
+        pbar.set_description(f'Getting embeddings ... ')
         embeddings = model('get_embedding', data, labels).cpu()
         for label, embedding in zip(labels, embeddings):
-            label_embeddings[tuple(label.tolist())].append(embedding)
+            label_embeddings[tuple(label.int().tolist())].append(embedding)
     return label_embeddings
 
 
 def save_embeddings(label_embeddings, opt):
     out_dir = opt.results_dir / opt.name
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f'{opt.which_epoch}_embeddings.pth'
+    out_path = out_dir / f'{opt.which_epoch}_{opt.phase}_{opt.data_type}_embeddings.pth'
     torch.save(label_embeddings, out_path)
     print(f'Embeddings saved to {out_path}')
 
-    embed_test = torch.load(out_path)
-    print(embed_test.keys())
-    for label in label_embeddings.keys():
-        if sum(label) == 1:
-            print(label, len(label_embeddings[label]))
+    # embed_test = torch.load(out_path)
+    # print(embed_test.keys())
+    # for label in label_embeddings.keys():
+    #     if sum(label) == 1:
+    #         print(label, len(label_embeddings[label]))
+
+
+def visualize_tsne(embeddings, opt):
+    from sklearn.manifold import TSNE
+    from sklearn.decomposition import PCA
+    import matplotlib.pyplot as plt
+
+    rand_state = 0
+    pca = PCA(n_components=50, random_state=rand_state)
+    tsne = TSNE(n_components=2, random_state=rand_state, n_jobs=-1)
+    all_embeddings = torch.cat(list(torch.stack(embedding_tensors) for embedding_tensors in embeddings.values()))
+    embedding_labels = [label for label, embedding_tensors in embeddings.items() for _ in embedding_tensors]
+    label_strs = dict()
+    for label in embeddings.keys():
+        label_str = [str(idx) for idx, label_value in enumerate(label) if label_value == 1]
+        label_strs[label] = '-'.join(label_str)
+    embedding_strings = list(map(lambda x: label_strs[x], embedding_labels))
+    all_embeddings = all_embeddings.numpy()
+
+    # all_embeddings = pca.fit_transform(all_embeddings)
+    all_embeddings = tsne.fit_transform(all_embeddings)
+
+    color_map = {label: plt.cm.tab20(idx) for idx, label in enumerate(embeddings.keys())}
+    embedding_colors = [color_map[label] for label in embedding_labels]
+
+    plt.figure(figsize=(12, 12))
+
+    x_min, x_max = all_embeddings.min(0), all_embeddings.max(0)
+    X_norm = (all_embeddings - x_min) / (x_max - x_min)  # Normalize
+    for idx in range(len(all_embeddings)):
+        plt.text(X_norm[idx, 0], X_norm[idx, 1], embedding_strings[idx], fontsize=6, color=embedding_colors[idx])
+    plt.xticks([])
+    plt.yticks([])
+    plt_dir = opt.results_dir / opt.name
+    plt_dir.mkdir(parents=True, exist_ok=True)
+    plt_path = plt_dir / f'{opt.which_epoch}_{opt.phase}_{opt.data_type}_tsne_{rand_state}_test.png'
+    plt.savefig(plt_path)
+    # plt.show()
+
+
+def calc_embeddings_mean_variance(embeddings):
+    label_strs = dict()
+    for label in embeddings.keys():
+        label_str = [str(idx) for idx, label_value in enumerate(label) if label_value == 1]
+        label_strs[label] = '-'.join(label_str)
+    for label, embedding_lists in embeddings.items():
+        embedding_tensors = torch.stack(embedding_lists)
+        mean = embedding_tensors.mean(dim=0)
+        var = embedding_tensors.var(dim=0)
+        embeddings[label] = [mean, var]
+    for first_label in embeddings.keys():
+        for second_label in embeddings.keys():
+            if first_label != second_label:
+                mean1, var1 = embeddings[first_label]
+                mean2, var2 = embeddings[second_label]
+                print(f'{label_strs[first_label]:^8} vs {label_strs[second_label]:^8}: '
+                      f'dist={torch.dist(mean1, mean2):.2f}, var1={var1.mean():.2f}, var2={var2.mean():.2f}')
 
 
 @torch.no_grad()
@@ -74,7 +131,7 @@ def test():
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     ])
 
-    test_dataset = dataset_cls(opt, phase=opt.phase, data_type='fusion', transform=test_transform)
+    test_dataset = dataset_cls(opt, phase=opt.phase, data_type=opt.data_type, transform=test_transform)
     test_loader = DataLoader(test_dataset, batch_size=opt.batch_size, shuffle=False,
                              num_workers=4, worker_init_fn=worker_init_fn, pin_memory=True)
     print(f'{len(test_loader.dataset)} images in test fusion set')
@@ -82,9 +139,15 @@ def test():
     model = create_model(opt)
     model.load(opt.which_epoch)
 
-    test_classifier(test_loader, model)
+    if opt.calc_classifier_acc:
+        test_classifier(test_loader, model)
+
+    embeddings = get_embeddings(test_loader, model)
+    # calc_embeddings_mean_variance(embeddings)
+    if opt.visualize_tsne:
+        visualize_tsne(embeddings, opt)
     if opt.save_embeddings:
-        save_embeddings(get_embeddings(test_loader, model), opt)
+        save_embeddings(embeddings, opt)
 
 
 if __name__ == '__main__':
@@ -92,5 +155,5 @@ if __name__ == '__main__':
     test()
 
 """
-python test_vit.py --name vit --data_dir A:/research/data
+python test_vit.py --name vit_shrink --data_dir A:/research/data --dataset_name codebrim_shrink --data_type defects --phase train --save_embeddings --visualize_tsne
 """

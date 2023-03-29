@@ -100,8 +100,9 @@ class ViTTrainer(BaseTrainer):
             optimizer.zero_grad()
         logits, clf_loss = self.model('train', data, labels)
         self.scaler.scale(clf_loss).backward()
-        for optimizer in self.optimizers.values():
-            self.scaler.step(optimizer)
+        # for optimizer in self.optimizers.values():
+        #     self.scaler.step(optimizer)
+        self.scaler.step(self.optimizers['C'])
         self.scaler.update()
         self.losses['clf']['train'].append(clf_loss.item())
 

@@ -45,7 +45,7 @@ class WGanDiscriminator(BaseNetwork):
 
 
 class DefectGanDiscriminator(BaseNetwork):
-    def __init__(self, label_nc, image_size=128, input_nc=3, num_layers=5, ndf=64, use_spectral=True):
+    def __init__(self, opt):
         """
             image to image translation network
 
@@ -53,17 +53,17 @@ class DefectGanDiscriminator(BaseNetwork):
         super().__init__()
         self.enc_blk = []
         conv_blk = []
-        crt_dim = ndf
+        crt_dim = opt.ndf
 
-        stem = ConvBlock(input_nc, crt_dim,
+        stem = ConvBlock(opt.input_nc, crt_dim,
                          kernel_size=(4, 4),
                          stride=(2, 2),
                          padding=1,
                          padding_mode='reflect',
                          norm_layer=None,
                          act_layer='leaky_relu',
-                         use_spectral=use_spectral)
-        for i in range(num_layers):
+                         use_spectral=opt.use_spectral)
+        for i in range(opt.num_layers):
             conv_blk.append(ConvBlock(crt_dim, crt_dim * 2,
                                       kernel_size=(4, 4),
                                       stride=(2, 2),
@@ -71,11 +71,11 @@ class DefectGanDiscriminator(BaseNetwork):
                                       padding_mode='reflect',
                                       norm_layer=None,
                                       act_layer='leaky_relu',
-                                      use_spectral=use_spectral))
+                                      use_spectral=opt.use_spectral))
             crt_dim *= 2
-        kernel_size = image_size // np.power(2, num_layers + 1)
+        kernel_size = opt.image_size // np.power(2, opt.num_layers + 1)
         self.enc_blk = nn.Sequential(stem, *conv_blk)
-        self.cls_clf = ConvBlock(crt_dim, label_nc,
+        self.cls_clf = ConvBlock(crt_dim, opt.label_nc,
                                  kernel_size=(kernel_size, kernel_size),
                                  norm_layer=None,
                                  act_layer=None)
@@ -97,9 +97,10 @@ class DefectGanDiscriminator(BaseNetwork):
 
 
 class ViTClassifier(BaseNetwork):
-    def __init__(self, label_nc):
+    def __init__(self, input_nc, label_nc):
         super().__init__()
-        self.clf = nn.Linear(768, label_nc)
+
+        self.clf = nn.Linear(input_nc, label_nc)
 
     def forward(self, x):
         return self.clf(x)

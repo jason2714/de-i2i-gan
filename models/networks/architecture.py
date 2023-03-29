@@ -3,7 +3,7 @@ import torch
 from torch import nn
 from torch.nn.utils import spectral_norm
 import torch.nn.functional as F
-from .normalization import SPADE
+from .normalization import SPADE, SEAN
 
 
 def get_act_layer(act_str):
@@ -380,7 +380,6 @@ class UnetBlock(nn.Module):
             feat = self.submodule(feat, seg)
         out = self.up_conv(feat, seg)
         if self.skip_conn:  # add skip connections
-            # TODO fix the nan bug
             return torch.cat([x, out], 1)
         else:
             return out
@@ -431,6 +430,130 @@ class ResnetSubModule(nn.Module):
         for dec_res_blk in self.dec_res_blk:
             feat = dec_res_blk(feat, seg)
         return feat
+
+
+class SEANConvBlock(nn.Module):
+    def __init__(self, embed_nc, label_nc, f_in, f_out,
+                 kernel_size=(3, 3),
+                 stride=(1, 1),
+                 padding=0,
+                 padding_mode='zeros',
+                 bias=False,
+                 up_scale=False,
+                 norm_layer=nn.InstanceNorm2d,
+                 act_layer='relu',
+                 use_spectral=False,
+                 add_noise=False):
+        """
+            valid_padding_strings = {'same', 'valid', int}
+            valid_padding_modes = {'zeros', 'reflect', 'replicate', 'circular'}
+            valid_activation_strings = {'leaky_relu', 'relu', 'sigmoid', 'tanh'}
+        """
+        super(SEANConvBlock, self).__init__()
+
+        # whether to up sample input image
+        if up_scale:
+            self.up = nn.Upsample(scale_factor=2)
+        else:
+            self.up = nn.Identity()
+
+        # whether to inject noise
+        if add_noise:
+            self.noise = NoiseInjection()
+        else:
+            self.noise = nn.Identity()
+
+        self.sean_norm = SEAN(embed_nc, f_in, label_nc, norm_layer=norm_layer)
+        self.conv = nn.Conv2d(f_in, f_out,
+                              kernel_size=kernel_size,
+                              stride=stride,
+                              padding=padding,
+                              padding_mode=padding_mode,
+                              bias=bias)
+
+        # add activation layer
+        self.act = get_act_layer(act_layer)
+
+        if use_spectral:
+            self.conv = spectral_norm(self.conv)
+
+    def forward(self, x, embedding):
+        x = self.up(x)
+        x = self.sean_norm(x, embedding)
+        out = self.noise(self.conv(self.act(x)))
+        return out
+
+
+class SEANResBlock(nn.Module):
+    def __init__(self, embed_nc, label_nc, f_in, f_out,
+                 kernel_size=(3, 3),
+                 stride=(1, 1),
+                 padding=0,
+                 padding_mode='zeros',
+                 bias=False,
+                 up_scale=False,
+                 norm_layer=nn.InstanceNorm2d,
+                 act_layer='relu',
+                 use_spectral=False,
+                 add_noise=False):
+        """
+            valid_padding_strings = {'same', 'valid', int}
+            valid_padding_modes = {'zeros', 'reflect', 'replicate', 'circular'}
+            valid_activation_strings = {'leaky_relu', 'relu', 'sigmoid', 'tanh'}
+        """
+        super(SEANResBlock, self).__init__()
+        self.up = nn.Upsample(scale_factor=2)
+        self.up_scale = up_scale
+        if add_noise:
+            self.noise_0 = NoiseInjection()
+            self.noise_1 = NoiseInjection()
+        else:
+            self.noise_0 = nn.Identity()
+            self.noise_1 = nn.Identity()
+
+        f_mid = min(f_in, f_out)
+        self.sean_norm_0 = SEAN(embed_nc, f_in, label_nc, norm_layer=norm_layer)
+        self.sean_norm_1 = SEAN(embed_nc, f_mid, label_nc, norm_layer=norm_layer)
+        self.sean_norm_s = SEAN(embed_nc, f_in, label_nc, norm_layer=norm_layer)
+        self.act = get_act_layer(act_layer)
+        self.conv_0 = nn.Conv2d(f_in, f_mid,
+                                kernel_size=kernel_size,
+                                stride=stride,
+                                padding=padding,
+                                padding_mode=padding_mode,
+                                bias=bias)
+        self.conv_1 = nn.Conv2d(f_mid, f_out,
+                                kernel_size=kernel_size,
+                                stride=stride,
+                                padding=padding,
+                                padding_mode=padding_mode,
+                                bias=bias)
+        self.conv_s = nn.Conv2d(f_in, f_out,
+                                kernel_size=kernel_size,
+                                stride=stride,
+                                padding=padding,
+                                padding_mode=padding_mode,
+                                bias=bias)
+        if use_spectral:
+            self.conv_0 = spectral_norm(self.conv_0)
+            self.conv_1 = spectral_norm(self.conv_1)
+            self.conv_s = spectral_norm(self.conv_s)
+
+    def forward(self, x, embedding):
+        if self.up_scale:
+            x = self.up(x)
+        x_s = self.shortcut(x, embedding)
+        x = self.noise_0(self.conv_0(self.act(self.sean_norm_0(x, embedding))))
+        x = self.noise_1(self.conv_1(self.act(self.sean_norm_1(x, embedding))))
+
+        return x + x_s
+
+    def shortcut(self, x, embedding):
+        if self.up_scale:
+            x_s = self.conv_s(self.sean_norm_s(x, embedding))
+        else:
+            x_s = x
+        return x_s
 
 
 class MaskToken(torch.nn.Module):

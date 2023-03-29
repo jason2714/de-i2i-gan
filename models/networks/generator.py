@@ -1,6 +1,6 @@
 from models.networks.base_network import BaseNetwork
 from models.networks.architecture import DeConvBlock, ConvBlock, ResBlock, \
-    SPADEResBlock, SPADEConvBlock, UnetBlock, ResnetSubModule
+    SPADEResBlock, SPADEConvBlock, UnetBlock, ResnetSubModule, SEANResBlock, SEANConvBlock
 import torch
 from torch import nn
 import math
@@ -48,39 +48,37 @@ class WGanGenerator(BaseNetwork):
 
 
 class DefectGanGenerator(BaseNetwork):
-    def __init__(self, label_nc, input_nc=3, num_scales=2, num_res=6, ngf=64,
-                 use_spectral=True, add_noise=True, cycle_gan=False, skip_conn=False):
+    def __init__(self, opt):
         """
             image to image translation network
 
         """
         super().__init__()
-        # DONE ADD SPADE, SPATIAL_DISTRIBUTION_MAP, ADAPTIVE_NOISE
-        assert (num_res & 1) == 0, 'num_res must be even'
-        self.cycle_gan = cycle_gan
-        self.label_nc = label_nc
-        self.skip_conn = skip_conn
+        assert (opt.num_res & 1) == 0, 'num_res must be even'
+        self.cycle_gan = opt.cycle_gan
+        self.label_nc = opt.label_nc
+        self.skip_conn = opt.skip_conn
 
         # stem
-        crt_dim = ngf
-        self.stem = ConvBlock(input_nc, crt_dim,
+        crt_dim = opt.ngf
+        self.stem = ConvBlock(opt.input_nc, crt_dim,
                               kernel_size=(7, 7),
                               padding='same',
                               padding_mode='reflect',
                               norm_layer=nn.BatchNorm2d,
                               act_layer='leaky_relu',
-                              use_spectral=use_spectral)
+                              use_spectral=opt.use_spectral)
 
-        if skip_conn:
+        if opt.skip_conn:
             # original kernel size is 7
-            crt_dim *= (2 ** num_scales)
-            unet_blk = ResnetSubModule(label_nc, crt_dim,
-                                       num_res=num_res, use_spectral=use_spectral, add_noise=add_noise)
-            for i in range(num_scales):
+            crt_dim *= (2 ** opt.num_scales)
+            unet_blk = ResnetSubModule(opt.label_nc, crt_dim,
+                                       num_res=opt.num_res, use_spectral=opt.use_spectral, add_noise=opt.add_noise)
+            for i in range(opt.num_scales):
                 crt_dim //= 2
-                unet_blk = UnetBlock(label_nc, crt_dim,
+                unet_blk = UnetBlock(opt.label_nc, crt_dim,
                                      submodule=unet_blk,
-                                     skip_conn=skip_conn,
+                                     skip_conn=opt.skip_conn,
                                      innermost=(i == 0),
                                      kernel_sizes=((4, 4), (3, 3)),
                                      strides=((2, 2), (1, 1)),
@@ -88,8 +86,8 @@ class DefectGanGenerator(BaseNetwork):
                                      padding_mode='reflect',
                                      norm_layers=(nn.BatchNorm2d, nn.InstanceNorm2d),
                                      act_layers=('leaky_relu', 'relu'),
-                                     use_spectral=use_spectral,
-                                     add_noise=add_noise)
+                                     use_spectral=opt.use_spectral,
+                                     add_noise=opt.add_noise)
             self.unet_blk = unet_blk
             crt_dim *= 2
         else:
@@ -103,7 +101,7 @@ class DefectGanGenerator(BaseNetwork):
             enc_res_blk = []
             dec_res_blk = []
 
-            for i in range(num_scales):
+            for i in range(opt.num_scales):
                 conv_blk.append(ConvBlock(crt_dim, crt_dim * 2,
                                           kernel_size=(4, 4),
                                           stride=(2, 2),
@@ -111,10 +109,10 @@ class DefectGanGenerator(BaseNetwork):
                                           padding_mode='reflect',
                                           norm_layer=nn.BatchNorm2d,
                                           act_layer='leaky_relu',
-                                          use_spectral=use_spectral))
+                                          use_spectral=opt.use_spectral))
                 crt_dim *= 2
 
-            for i in range(num_res // 2):
+            for i in range(opt.num_res // 2):
                 enc_res_blk.append(ResBlock(crt_dim, crt_dim,
                                             kernel_size=(3, 3),
                                             stride=(1, 1),
@@ -122,7 +120,7 @@ class DefectGanGenerator(BaseNetwork):
                                             padding_mode='reflect',
                                             norm_layer=nn.BatchNorm2d,
                                             act_layer='leaky_relu',
-                                            use_spectral=use_spectral))
+                                            use_spectral=opt.use_spectral))
                 # enc_res_blk.append(SPADEResBlock(label_nc, crt_dim, crt_dim,
                 #                                  kernel_size=(3, 3),
                 #                                  stride=(1, 1),
@@ -135,8 +133,8 @@ class DefectGanGenerator(BaseNetwork):
                 #                                  add_noise=add_noise))
 
             # decoder
-            for i in range(num_res // 2, num_res):
-                dec_res_blk.append(SPADEResBlock(label_nc, crt_dim, crt_dim,
+            for i in range(opt.num_res // 2, opt.num_res):
+                dec_res_blk.append(SPADEResBlock(opt.label_nc, crt_dim, crt_dim,
                                                  kernel_size=(3, 3),
                                                  stride=(1, 1),
                                                  padding='same',
@@ -144,11 +142,21 @@ class DefectGanGenerator(BaseNetwork):
                                                  up_scale=False,
                                                  norm_layer=nn.InstanceNorm2d,
                                                  act_layer='relu',
-                                                 use_spectral=use_spectral,
-                                                 add_noise=add_noise))
+                                                 use_spectral=opt.use_spectral,
+                                                 add_noise=opt.add_noise))
+                dec_res_blk.append(SEANResBlock(opt.embed_nc, opt.label_nc, crt_dim, crt_dim,
+                                                kernel_size=(3, 3),
+                                                stride=(1, 1),
+                                                padding='same',
+                                                padding_mode='reflect',
+                                                up_scale=False,
+                                                norm_layer=nn.InstanceNorm2d,
+                                                act_layer='relu',
+                                                use_spectral=opt.use_spectral,
+                                                add_noise=opt.add_noise))
 
-            for i in range(num_scales):
-                de_conv_blk.append(SPADEConvBlock(label_nc, crt_dim, crt_dim // 2,
+            for i in range(opt.num_scales):
+                de_conv_blk.append(SPADEConvBlock(opt.label_nc, crt_dim, crt_dim // 2,
                                                   kernel_size=(3, 3),
                                                   stride=(1, 1),
                                                   padding='same',
@@ -156,8 +164,8 @@ class DefectGanGenerator(BaseNetwork):
                                                   up_scale=True,
                                                   norm_layer=nn.InstanceNorm2d,
                                                   act_layer='relu',
-                                                  use_spectral=use_spectral,
-                                                  add_noise=add_noise))
+                                                  use_spectral=opt.use_spectral,
+                                                  add_noise=opt.add_noise))
                 crt_dim //= 2
 
             self.enc_blk = nn.Sequential(*conv_blk)
