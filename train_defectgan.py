@@ -6,7 +6,7 @@ from utils.util import worker_init_fn
 from torchvision import transforms
 from utils.util import fix_rand_seed
 from trainers import find_trainer_using_model_name
-import math
+from datasets.codebrim_dataset import CodeBrimDataset
 
 DATATYPE = ["defects", "background"]
 NUM_SAMPLES = {"defects": None,
@@ -48,7 +48,8 @@ NUM_SAMPLES = {"defects": None,
 
 def train():
     opt = TrainOptions().parse()
-    dataset_cls = find_dataset_using_name(opt.dataset_name)
+    # dataset_cls = find_dataset_using_name(opt.dataset_name)
+    dataset_cls = CodeBrimDataset
     # initial args from dataset
     opt.clf_loss_type = dataset_cls.clf_loss_type
 
@@ -123,6 +124,7 @@ if __name__ == '__main__':
     python train_defectgan.py --data_dir A:/research/data --name org_mae --loss_weight 2 5 10 1 3 --npz_path A:/research/data/codebrim/val/defects00.npz --phase val --add_noise --use_spectral --load_model_name mae_gan_lr --scheduler cos
     python train_defectgan.py --name org_lw_wo_resize --continue_training --load_from_opt_file
     tensorboard --logdir log\test_df --samples_per_plugin "images=100"
-    python train_defectgan.py --data_dir A:/research/data --name org_mae_l1_ttur --loss_weight 2 5 10 1 3 --npz_path A:/research/data/codebrim/val/defects00.npz --phase val --add_noise --use_spectral --load_model_name mae_l1 --scheduler cos --num_iters 100_000 --lr 1e-4 2e-5 --num_critics 1 --save_img_freq 2 --save_ckpt_freq 5
     python train_defectgan.py --data_dir A:/research/data --name org_shrink --loss_weight 2 5 10 1 3 --npz_path A:/research/data/codebrim/val/defects00.npz --phase val --add_noise --use_spectral --scheduler cos --num_iters 20_000 --save_latest_freq 200
+     --embed_path A:/research/de-i2i-gan/results/vit_shrink/latest_train_fusion_embeddings.pth --use_embed_only --dataset_name codebrim_shrink --style_norm_block_type sean
+     python train_defectgan.py --name org_mae_shrink_token_zero --data_dir A:/research/data --load_model_name mae_shrink_token_zero --loss_weight 2 5 10 1 3 --npz_path A:/research/data/codebrim/val/defects00.npz --phase val --add_noise --use_spectral --scheduler cos --num_iters 20_000 --save_latest_freq 200 --dataset_name codebrim_shrink
     '''

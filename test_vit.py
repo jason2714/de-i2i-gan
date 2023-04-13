@@ -1,3 +1,5 @@
+import random
+
 import torch
 
 from datasets.codebrim_dataset import CodeBrimDataset
@@ -11,6 +13,7 @@ from options.vit_options import TestOptions
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from collections import defaultdict
+from utils.util import visualize_embeddings, calc_embeddings_mean_variance
 
 
 def arg_parse():
@@ -34,15 +37,16 @@ def test_classifier(data_loader, model):
     return acc / len(data_loader.dataset), loss / len(data_loader)
 
 
-def get_embeddings(data_loader, model):
+def get_embeddings(data_loader, model, num_epochs):
     label_embeddings = defaultdict(list)
-    pbar = tqdm(data_loader, colour='MAGENTA')
-    # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
-    for data, labels, _ in pbar:
-        pbar.set_description(f'Getting embeddings ... ')
-        embeddings = model('get_embedding', data, labels).cpu()
-        for label, embedding in zip(labels, embeddings):
-            label_embeddings[tuple(label.int().tolist())].append(embedding)
+    for epoch in range(num_epochs):
+        pbar = tqdm(data_loader, colour='MAGENTA')
+        # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
+        for data, labels, _ in pbar:
+            pbar.set_description(f'Getting embeddings at epoch {epoch} ... ')
+            embeddings = model('get_embedding', data, labels).cpu()
+            for label, embedding in zip(labels, embeddings):
+                label_embeddings[tuple(label.int().tolist())].append(embedding)
     return label_embeddings
 
 
@@ -54,67 +58,13 @@ def save_embeddings(label_embeddings, opt):
     print(f'Embeddings saved to {out_path}')
 
     # embed_test = torch.load(out_path)
-    # print(embed_test.keys())
+    # mean_embed = torch.stack(random.choices(embed_test[(1, 0, 0, 0, 0, 0)], k=5))
+    # print(mean_embed.shape)
+    # print(mean_embed.mean(dim=0).shape)
     # for label in label_embeddings.keys():
     #     if sum(label) == 1:
-    #         print(label, len(label_embeddings[label]))
-
-
-def visualize_tsne(embeddings, opt):
-    from sklearn.manifold import TSNE
-    from sklearn.decomposition import PCA
-    import matplotlib.pyplot as plt
-
-    rand_state = 0
-    pca = PCA(n_components=50, random_state=rand_state)
-    tsne = TSNE(n_components=2, random_state=rand_state, n_jobs=-1)
-    all_embeddings = torch.cat(list(torch.stack(embedding_tensors) for embedding_tensors in embeddings.values()))
-    embedding_labels = [label for label, embedding_tensors in embeddings.items() for _ in embedding_tensors]
-    label_strs = dict()
-    for label in embeddings.keys():
-        label_str = [str(idx) for idx, label_value in enumerate(label) if label_value == 1]
-        label_strs[label] = '-'.join(label_str)
-    embedding_strings = list(map(lambda x: label_strs[x], embedding_labels))
-    all_embeddings = all_embeddings.numpy()
-
-    # all_embeddings = pca.fit_transform(all_embeddings)
-    all_embeddings = tsne.fit_transform(all_embeddings)
-
-    color_map = {label: plt.cm.tab20(idx) for idx, label in enumerate(embeddings.keys())}
-    embedding_colors = [color_map[label] for label in embedding_labels]
-
-    plt.figure(figsize=(12, 12))
-
-    x_min, x_max = all_embeddings.min(0), all_embeddings.max(0)
-    X_norm = (all_embeddings - x_min) / (x_max - x_min)  # Normalize
-    for idx in range(len(all_embeddings)):
-        plt.text(X_norm[idx, 0], X_norm[idx, 1], embedding_strings[idx], fontsize=6, color=embedding_colors[idx])
-    plt.xticks([])
-    plt.yticks([])
-    plt_dir = opt.results_dir / opt.name
-    plt_dir.mkdir(parents=True, exist_ok=True)
-    plt_path = plt_dir / f'{opt.which_epoch}_{opt.phase}_{opt.data_type}_tsne_{rand_state}_test.png'
-    plt.savefig(plt_path)
-    # plt.show()
-
-
-def calc_embeddings_mean_variance(embeddings):
-    label_strs = dict()
-    for label in embeddings.keys():
-        label_str = [str(idx) for idx, label_value in enumerate(label) if label_value == 1]
-        label_strs[label] = '-'.join(label_str)
-    for label, embedding_lists in embeddings.items():
-        embedding_tensors = torch.stack(embedding_lists)
-        mean = embedding_tensors.mean(dim=0)
-        var = embedding_tensors.var(dim=0)
-        embeddings[label] = [mean, var]
-    for first_label in embeddings.keys():
-        for second_label in embeddings.keys():
-            if first_label != second_label:
-                mean1, var1 = embeddings[first_label]
-                mean2, var2 = embeddings[second_label]
-                print(f'{label_strs[first_label]:^8} vs {label_strs[second_label]:^8}: '
-                      f'dist={torch.dist(mean1, mean2):.2f}, var1={var1.mean():.2f}, var2={var2.mean():.2f}')
+    #         print(label, type(label_embeddings[label]), label_embeddings[label][0].shape)
+    #         exit()
 
 
 @torch.no_grad()
@@ -142,10 +92,13 @@ def test():
     if opt.calc_classifier_acc:
         test_classifier(test_loader, model)
 
-    embeddings = get_embeddings(test_loader, model)
+    embeddings = get_embeddings(test_loader, model, opt.num_embeddings_epochs)
     # calc_embeddings_mean_variance(embeddings)
     if opt.visualize_tsne:
-        visualize_tsne(embeddings, opt)
+        plt_dir = opt.results_dir / opt.name
+        plt_name = f'{opt.which_epoch}_{opt.phase}_{opt.data_type}_tsne_test.png'
+
+        visualize_embeddings(embeddings, plt_dir, plt_name, reduction_type='tsne')
     if opt.save_embeddings:
         save_embeddings(embeddings, opt)
 

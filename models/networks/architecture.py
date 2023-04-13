@@ -1,4 +1,6 @@
 import logging
+import math
+
 import torch
 from torch import nn
 from torch.nn.utils import spectral_norm
@@ -399,16 +401,6 @@ class ResnetSubModule(nn.Module):
                                         norm_layer=nn.BatchNorm2d,
                                         act_layer='leaky_relu',
                                         use_spectral=use_spectral))
-            # enc_res_blk.append(SPADEResBlock(label_nc, crt_dim, crt_dim,
-            #                                  kernel_size=(3, 3),
-            #                                  stride=(1, 1),
-            #                                  padding='same',
-            #                                  padding_mode='reflect',
-            #                                  up_scale=False,
-            #                                  norm_layer=nn.BatchNorm2d,
-            #                                  act_layer='leaky_relu',
-            #                                  use_spectral=use_spectral,
-            #                                  add_noise=add_noise))
         # decoder
         for i in range(num_res // 2, num_res):
             dec_res_blk.append(SPADEResBlock(label_nc, crt_dim, crt_dim,
@@ -434,6 +426,7 @@ class ResnetSubModule(nn.Module):
 
 class SEANConvBlock(nn.Module):
     def __init__(self, embed_nc, label_nc, f_in, f_out,
+                 use_embed_only=False,
                  kernel_size=(3, 3),
                  stride=(1, 1),
                  padding=0,
@@ -463,7 +456,7 @@ class SEANConvBlock(nn.Module):
         else:
             self.noise = nn.Identity()
 
-        self.sean_norm = SEAN(embed_nc, f_in, label_nc, norm_layer=norm_layer)
+        self.sean_norm = SEAN(embed_nc, f_in, label_nc, norm_layer=norm_layer, use_embed_only=use_embed_only)
         self.conv = nn.Conv2d(f_in, f_out,
                               kernel_size=kernel_size,
                               stride=stride,
@@ -477,15 +470,19 @@ class SEANConvBlock(nn.Module):
         if use_spectral:
             self.conv = spectral_norm(self.conv)
 
-    def forward(self, x, embedding):
+    def forward(self, x, labels, style_feat=None):
         x = self.up(x)
-        x = self.sean_norm(x, embedding)
+        x = self.sean_norm(x, labels, style_feat)
         out = self.noise(self.conv(self.act(x)))
         return out
+
+    def update_alpha(self, epoch, num_epochs):
+        self.sean_norm.update_alpha(epoch, num_epochs)
 
 
 class SEANResBlock(nn.Module):
     def __init__(self, embed_nc, label_nc, f_in, f_out,
+                 use_embed_only=False,
                  kernel_size=(3, 3),
                  stride=(1, 1),
                  padding=0,
@@ -512,9 +509,9 @@ class SEANResBlock(nn.Module):
             self.noise_1 = nn.Identity()
 
         f_mid = min(f_in, f_out)
-        self.sean_norm_0 = SEAN(embed_nc, f_in, label_nc, norm_layer=norm_layer)
-        self.sean_norm_1 = SEAN(embed_nc, f_mid, label_nc, norm_layer=norm_layer)
-        self.sean_norm_s = SEAN(embed_nc, f_in, label_nc, norm_layer=norm_layer)
+        self.sean_norm_0 = SEAN(embed_nc, f_in, label_nc, norm_layer=norm_layer, use_embed_only=use_embed_only)
+        self.sean_norm_1 = SEAN(embed_nc, f_mid, label_nc, norm_layer=norm_layer, use_embed_only=use_embed_only)
+        self.sean_norm_s = SEAN(embed_nc, f_in, label_nc, norm_layer=norm_layer, use_embed_only=use_embed_only)
         self.act = get_act_layer(act_layer)
         self.conv_0 = nn.Conv2d(f_in, f_mid,
                                 kernel_size=kernel_size,
@@ -539,28 +536,36 @@ class SEANResBlock(nn.Module):
             self.conv_1 = spectral_norm(self.conv_1)
             self.conv_s = spectral_norm(self.conv_s)
 
-    def forward(self, x, embedding):
+    def forward(self, x, labels, style_feat=None):
         if self.up_scale:
             x = self.up(x)
-        x_s = self.shortcut(x, embedding)
-        x = self.noise_0(self.conv_0(self.act(self.sean_norm_0(x, embedding))))
-        x = self.noise_1(self.conv_1(self.act(self.sean_norm_1(x, embedding))))
+        x_s = self.shortcut(x, labels, style_feat)
+        x = self.noise_0(self.conv_0(self.act(self.sean_norm_0(x, labels, style_feat))))
+        x = self.noise_1(self.conv_1(self.act(self.sean_norm_1(x, labels, style_feat))))
 
         return x + x_s
 
-    def shortcut(self, x, embedding):
+    def shortcut(self, x, labels, style_feat=None):
         if self.up_scale:
-            x_s = self.conv_s(self.sean_norm_s(x, embedding))
+            x_s = self.conv_s(self.sean_norm_s(x, labels, style_feat))
         else:
             x_s = x
         return x_s
+
+    def update_alpha(self, epoch, num_epochs):
+        self.sean_norm_0.update_alpha(epoch, num_epochs)
+        self.sean_norm_1.update_alpha(epoch, num_epochs)
+        self.sean_norm_s.update_alpha(epoch, num_epochs)
 
 
 class MaskToken(torch.nn.Module):
     def __init__(self, opt):
         super().__init__()
-        self.mask_token = torch.nn.Parameter(torch.empty(1, opt.input_nc, opt.image_size, opt.image_size)
-                                             .normal_(mean=0, std=opt.init_variance))
+        # self.mask_token = torch.nn.Parameter(torch.empty(1, opt.input_nc, opt.image_size, opt.image_size)
+        #                                      .normal_(mean=0, std=opt.init_variance))
+        # self.mask_token = torch.nn.Parameter(torch.empty(1, 1, opt.image_size, opt.image_size)
+        #                                      .normal_(mean=0, std=opt.init_variance))
+        self.mask_token = torch.nn.Parameter(torch.zeros(1, 1, opt.image_size, opt.image_size))
         # self.mask_token = torch.nn.Parameter(torch.empty(1, 1, 1, 1).normal_(mean=0, std=opt.init_variance))
 
     def forward(self, x, masks):

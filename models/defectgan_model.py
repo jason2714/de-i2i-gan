@@ -1,3 +1,5 @@
+import random
+
 from models.networks.generator import DefectGanGenerator
 from models.networks.discriminator import DefectGanDiscriminator
 from models.base_model import BaseModel
@@ -25,6 +27,13 @@ class DefectGanModel(BaseModel):
 
         # learnable mask token
         self.mask_token = MaskToken(opt).to(opt.device, non_blocking=True)
+
+        # style embedding
+        if opt.style_norm_block_type == 'sean' and not opt.use_latent_only:
+            assert opt.embed_path is not None, 'embed_path should be initialized if style_norm_block_type is sean'
+            self.embeddings = torch.load(opt.embed_path)
+            for label, embeds in self.embeddings.items():
+                self.embeddings[label] = [embed.to(opt.device, non_blocking=True) for embed in embeds]
 
     def __call__(self, mode, data, labels, df_data=None, img_only=False):
         # for mae
@@ -84,13 +93,8 @@ class DefectGanModel(BaseModel):
 
         predicted_imgs, masks = self._repair_mask(imgs, labels)
 
-        # mae l2-loss
+        # mae l1-loss
         rec_loss = self._cal_loss(predicted_imgs, imgs, 'l1')
-        # rec_loss = self._cal_loss(predicted_imgs * (1 - masks), imgs * (1 - masks), 'mse') / self.opt.mask_ratio
-
-        # fake_src, fake_cls = self.netD(predicted_imgs)
-        # clf_loss = self._cal_loss(fake_cls, labels, self.clf_loss_type)
-        # return rec_loss, torch.zeros([], requires_grad=False), clf_loss
 
         if self.opt.split_training:
             return rec_loss, torch.zeros([], requires_grad=False), torch.zeros([], requires_grad=False)
@@ -131,15 +135,33 @@ class DefectGanModel(BaseModel):
         bg_data, df_labels, df_data = bg_data.to(self.netG.device, non_blocking=True), \
                                       df_labels.to(self.netG.device, non_blocking=True), \
                                       df_data.to(self.netG.device, non_blocking=True)
-        seg = self._expand_seg(df_labels)
 
-        # normal -> defect -> normal
-        fake_defects, df_prob = self.netG(bg_data, seg)
-        recover_normals, rec_df_prob = self.netG(fake_defects, -seg)
+        nm_labels = torch.zeros_like(df_labels, dtype=torch.float).to(self.netD.device, non_blocking=True)
+        nm_labels[:, 0] = 1
+        if self.opt.style_norm_block_type == 'sean':
+            nm_label_feat = self._get_style_embeds(nm_labels)
+            df_label_feat = self._get_style_embeds(df_labels)
+            # normal -> defect -> normal
+            fake_defects, df_prob = self.netG(bg_data, df_labels, df_label_feat)
+            recover_normals, rec_df_prob = self.netG(fake_defects, nm_labels, nm_label_feat)
 
-        # defect -> normal -> defect
-        fake_normals, nm_prob = self.netG(df_data, -seg)
-        recover_defects, rec_nm_prob = self.netG(fake_normals, seg)
+            # defect -> normal -> defect
+            fake_normals, nm_prob = self.netG(df_data, nm_labels, nm_label_feat)
+            recover_defects, rec_nm_prob = self.netG(fake_normals, df_labels, df_label_feat)
+        elif self.opt.style_norm_block_type == 'spade':
+            nm_label_feat = self._expand_seg(nm_labels)
+            df_label_feat = self._expand_seg(df_labels)
+            # normal -> defect -> normal
+            fake_defects, df_prob = self.netG(bg_data, df_label_feat)
+            # recover_normals, rec_df_prob = self.netG(fake_defects, -df_label_feat)
+            recover_normals, rec_df_prob = self.netG(fake_defects, nm_label_feat)
+
+            # defect -> normal -> defect
+            fake_normals, nm_prob = self.netG(df_data, nm_label_feat)
+            # fake_normals, nm_prob = self.netG(df_data, -df_label_feat)
+            recover_defects, rec_nm_prob = self.netG(fake_normals, df_label_feat)
+        else:
+            raise ValueError(f"|style_norm_block_type {self.opt.style_norm_block_type}| is invalid")
 
         # discriminator
         fake_defects_src, fake_defects_cls = self.netD(fake_defects)
@@ -151,8 +173,6 @@ class DefectGanModel(BaseModel):
                     'fake_normal': self._cal_loss(fake_normals_src, fake_labels, 'bce')}
 
         # clf loss
-        nm_labels = torch.zeros_like(fake_normals_cls, dtype=torch.float).to(self.netD.device, non_blocking=True)
-        nm_labels[:, 0] = 1
         clf_loss = {'fake_defect': self._cal_loss(fake_defects_cls, df_labels, self.clf_loss_type),
                     'fake_normal': self._cal_loss(fake_normals_cls, nm_labels, self.clf_loss_type)}
         # print(clf_loss)
@@ -187,13 +207,30 @@ class DefectGanModel(BaseModel):
         bg_data, df_labels, df_data = bg_data.to(self.netG.device, non_blocking=True), \
                                       df_labels.to(self.netG.device, non_blocking=True), \
                                       df_data.to(self.netG.device, non_blocking=True)
-        # generator
-        seg = df_labels.reshape(*df_labels.size(), 1, 1)
-        with torch.no_grad():
-            # normal -> defect
-            fake_defects, _ = self.netG(bg_data, seg)
-            # defect -> normal
-            fake_normals, _ = self.netG(df_data, -seg)
+        nm_labels = torch.zeros_like(df_labels, dtype=torch.float).to(self.netD.device, non_blocking=True)
+        nm_labels[:, 0] = 1
+        if self.opt.style_norm_block_type == 'sean':
+            nm_label_feat = self._get_style_embeds(nm_labels)
+            df_label_feat = self._get_style_embeds(df_labels)
+            # generator
+            with torch.no_grad():
+                # normal -> defect
+                fake_defects, _ = self.netG(bg_data, df_labels, df_label_feat)
+                # defect -> normal
+                fake_normals, _ = self.netG(df_data, nm_labels, nm_label_feat)
+        elif self.opt.style_norm_block_type == 'spade':
+            nm_label_feat = self._expand_seg(nm_labels)
+            df_label_feat = self._expand_seg(df_labels)
+            # generator
+            with torch.no_grad():
+                # normal -> defect
+                fake_defects, _ = self.netG(bg_data, df_label_feat)
+                # defect -> normal
+                # fake_normals, _ = self.netG(df_data, -df_label_feat)
+                fake_normals, _ = self.netG(df_data, nm_label_feat)
+        else:
+            raise ValueError(f"|style_norm_block_type {self.opt.style_norm_block_type}| is invalid")
+
 
         fake_defects.requires_grad = True
         fake_normals.requires_grad = True
@@ -214,8 +251,6 @@ class DefectGanModel(BaseModel):
 
         # clf loss
         # problem
-        nm_labels = torch.zeros_like(real_normals_cls, dtype=torch.float).to(self.netD.device, non_blocking=True)
-        nm_labels[:, 0] = 1
         clf_loss = {'real_defect': self._cal_loss(real_defects_cls, df_labels, self.clf_loss_type),
                     'real_normal': self._cal_loss(real_normals_cls, nm_labels, self.clf_loss_type)}
         # exit()
@@ -234,8 +269,14 @@ class DefectGanModel(BaseModel):
     @torch.no_grad()
     def _generate_fake(self, data, labels):
         data, labels = data.to(self.netG.device), labels.to(self.netG.device, non_blocking=True)
-        seg = self._expand_seg(labels)
-        return self.netG(data, seg)
+        if self.opt.style_norm_block_type == 'sean':
+            label_feat = self._get_style_embeds(labels)
+            return self.netG(data, labels, label_feat)
+        elif self.opt.style_norm_block_type == 'spade':
+            label_feat = self._expand_seg(labels)
+            return self.netG(data, label_feat)
+        else:
+            raise ValueError(f"|style_norm_block_type {self.opt.style_norm_block_type}| is invalid")
 
     @torch.no_grad()
     def _generate_fake_grids(self, bg_data, labels, img_only=False):
@@ -285,9 +326,7 @@ class DefectGanModel(BaseModel):
         return make_grid(grid_imgs, nrow=nrow)
 
     def _repair_mask(self, imgs, labels):
-        # seg = self._expand_seg(torch.zeros_like(labels))
-        seg = self._expand_seg(labels)
-        # masks = generate_mask(imgs.size(), self.opt.patch_size, self.opt.mask_ratio)
+        # generate and apply mask
         masks = generate_shifted_mask(imgs.size(), self.opt.patch_size, self.opt.mask_ratio)
         masks = masks.to(self.opt.device, non_blocking=True)
         masked_imgs = imgs * masks
@@ -297,7 +336,16 @@ class DefectGanModel(BaseModel):
         # img_mean = img_mean.reshape(*img_mean.size()[:2], 1, 1)
         masked_imgs = self.mask_token(masked_imgs, masks)
 
-        predicted_imgs, _ = self.netG(masked_imgs, seg)
+        if self.opt.style_norm_block_type == 'sean':
+            style_feat = self._get_style_embeds(labels)
+            predicted_imgs, _ = self.netG(masked_imgs, labels, style_feat)
+        elif self.opt.style_norm_block_type == 'spade':
+            # seg = self._expand_seg(torch.zeros_like(labels))
+            seg = self._expand_seg(labels)
+            predicted_imgs, _ = self.netG(masked_imgs, seg)
+        else:
+            raise ValueError(f"|style_norm_block_type {self.opt.style_norm_block_type}| is invalid")
+
         return predicted_imgs, masks
 
     def _expand_seg(self, labels):
@@ -308,3 +356,20 @@ class DefectGanModel(BaseModel):
         else:
             raise ValueError(f"|labels dim {len(labels.size())}| is invalid")
         return seg
+
+    def _get_style_embeds(self, labels):
+        if self.opt.use_latent_only:
+            return None
+        embed_list = []
+        num_embeds = 5
+        for label in labels:
+            tuple_label = tuple(label.int().tolist())
+            if not self.embeddings[tuple_label]:
+                mean_embed = torch.zeros(num_embeds, self.opt.embed_nc).to(self.netG.device)
+            else:
+                embeds = random.choices(self.embeddings[tuple_label], k=5)
+                # mean_embed = torch.stack(embeds).mean(dim=0)
+                mean_embed = torch.stack(embeds)
+            embed_list.append(mean_embed)
+        return torch.stack(embed_list)
+

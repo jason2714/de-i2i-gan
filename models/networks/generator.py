@@ -134,38 +134,58 @@ class DefectGanGenerator(BaseNetwork):
 
             # decoder
             for i in range(opt.num_res // 2, opt.num_res):
-                dec_res_blk.append(SPADEResBlock(opt.label_nc, crt_dim, crt_dim,
-                                                 kernel_size=(3, 3),
-                                                 stride=(1, 1),
-                                                 padding='same',
-                                                 padding_mode='reflect',
-                                                 up_scale=False,
-                                                 norm_layer=nn.InstanceNorm2d,
-                                                 act_layer='relu',
-                                                 use_spectral=opt.use_spectral,
-                                                 add_noise=opt.add_noise))
-                dec_res_blk.append(SEANResBlock(opt.embed_nc, opt.label_nc, crt_dim, crt_dim,
-                                                kernel_size=(3, 3),
-                                                stride=(1, 1),
-                                                padding='same',
-                                                padding_mode='reflect',
-                                                up_scale=False,
-                                                norm_layer=nn.InstanceNorm2d,
-                                                act_layer='relu',
-                                                use_spectral=opt.use_spectral,
-                                                add_noise=opt.add_noise))
+                if opt.style_norm_block_type == 'spade':
+                    dec_res_blk.append(SPADEResBlock(opt.label_nc, crt_dim, crt_dim,
+                                                     kernel_size=(3, 3),
+                                                     stride=(1, 1),
+                                                     padding='same',
+                                                     padding_mode='reflect',
+                                                     up_scale=False,
+                                                     norm_layer=nn.InstanceNorm2d,
+                                                     act_layer='relu',
+                                                     use_spectral=opt.use_spectral,
+                                                     add_noise=opt.add_noise))
+                elif opt.style_norm_block_type == 'sean':
+                    dec_res_blk.append(SEANResBlock(opt.embed_nc, opt.label_nc, crt_dim, crt_dim,
+                                                    opt.use_embed_only,
+                                                    kernel_size=(3, 3),
+                                                    stride=(1, 1),
+                                                    padding='same',
+                                                    padding_mode='reflect',
+                                                    up_scale=False,
+                                                    norm_layer=nn.InstanceNorm2d,
+                                                    act_layer='relu',
+                                                    use_spectral=opt.use_spectral,
+                                                    add_noise=opt.add_noise))
+                else:
+                    raise NotImplementedError(f'style norm block type [{opt.style_norm_block_type}] is not implemented')
 
             for i in range(opt.num_scales):
-                de_conv_blk.append(SPADEConvBlock(opt.label_nc, crt_dim, crt_dim // 2,
-                                                  kernel_size=(3, 3),
-                                                  stride=(1, 1),
-                                                  padding='same',
-                                                  padding_mode='reflect',
-                                                  up_scale=True,
-                                                  norm_layer=nn.InstanceNorm2d,
-                                                  act_layer='relu',
-                                                  use_spectral=opt.use_spectral,
-                                                  add_noise=opt.add_noise))
+                if opt.style_norm_block_type == 'spade':
+                    de_conv_blk.append(SPADEConvBlock(opt.label_nc, crt_dim, crt_dim // 2,
+                                                      kernel_size=(3, 3),
+                                                      stride=(1, 1),
+                                                      padding='same',
+                                                      padding_mode='reflect',
+                                                      up_scale=True,
+                                                      norm_layer=nn.InstanceNorm2d,
+                                                      act_layer='relu',
+                                                      use_spectral=opt.use_spectral,
+                                                      add_noise=opt.add_noise))
+                elif opt.style_norm_block_type == 'sean':
+                    de_conv_blk.append(SEANConvBlock(opt.embed_nc, opt.label_nc, crt_dim, crt_dim // 2,
+                                                     opt.use_embed_only,
+                                                     kernel_size=(3, 3),
+                                                     stride=(1, 1),
+                                                     padding='same',
+                                                     padding_mode='reflect',
+                                                     up_scale=True,
+                                                     norm_layer=nn.InstanceNorm2d,
+                                                     act_layer='relu',
+                                                     use_spectral=opt.use_spectral,
+                                                     add_noise=opt.add_noise))
+                else:
+                    raise NotImplementedError(f'style norm block type [{opt.style_norm_block_type}] is not implemented')
                 crt_dim //= 2
 
             self.enc_blk = nn.Sequential(*conv_blk)
@@ -193,7 +213,7 @@ class DefectGanGenerator(BaseNetwork):
                                              use_spectral=False,
                                              add_noise=False)
 
-    def forward(self, x, labels):
+    def forward(self, x, labels, style_feat=None):
         assert isinstance(x, torch.Tensor), "x must be Original Images: Torch.Tensor"
         # expand labels' shape to the same as data
         # x, labels = x.to(self.device, non_blocking=True), labels.to(self.device, non_blocking=True)
@@ -211,11 +231,17 @@ class DefectGanGenerator(BaseNetwork):
             for enc_res_blk in self.enc_res_blk:
                 feat = enc_res_blk(feat, labels)
             for dec_res_blk in self.dec_res_blk:
-                feat = dec_res_blk(feat, labels)
+                if isinstance(dec_res_blk, (SEANResBlock, SEANConvBlock)):
+                    feat = dec_res_blk(feat, labels, style_feat)
+                else:
+                    feat = dec_res_blk(feat, labels)
             # inner residual block section
 
             for dec_blk in self.dec_blk:
-                feat = dec_blk(feat, labels)
+                if isinstance(dec_blk, (SEANResBlock, SEANConvBlock)):
+                    feat = dec_blk(feat, labels, style_feat)
+                else:
+                    feat = dec_blk(feat, labels)
         if feat.isnan().any():
             feat.nan_to_num_()
         foreground = self.foreground_head(feat)
@@ -226,3 +252,13 @@ class DefectGanGenerator(BaseNetwork):
             return foreground, spatial_prob
         else:
             return output, spatial_prob
+
+    def update_per_epoch(self, epoch, num_epochs=None):
+        super(DefectGanGenerator, self).update_per_epoch(epoch, num_epochs)
+        for dec_res_blk in self.dec_res_blk:
+            if isinstance(dec_res_blk, (SEANResBlock, SEANConvBlock)):
+                dec_res_blk.update_alpha(epoch, num_epochs)
+        for dec_blk in self.dec_blk:
+            if isinstance(dec_blk, (SEANResBlock, SEANConvBlock)):
+                dec_blk.update_alpha(epoch, num_epochs)
+

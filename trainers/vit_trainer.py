@@ -52,6 +52,7 @@ class ViTTrainer(BaseTrainer):
             self._write_tf_log(writer, epoch)
             if epoch % self.opt.save_ckpt_freq == 0:
                 self.model.save(epoch)
+            self._update_per_epoch(epoch)
         writer.close()
 
     def _train_epoch(self, data_loader, epoch):
@@ -74,8 +75,6 @@ class ViTTrainer(BaseTrainer):
             pbar.set_postfix(acc=f'{num_acc / num_data:.3f} ({num_acc}/{num_data})',
                              clf=f'{sum(self.losses["clf"]["train"]) / (len(self.losses["clf"]["train"]) + 1e-12):.4f}')
         self.metrics['acc']['train'] = num_acc / num_data
-        for model_name in self.schedulers.keys():
-            self.schedulers[model_name].step()
 
     @torch.no_grad()
     def _val_epoch(self, data_loader, epoch):

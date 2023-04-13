@@ -59,3 +59,7 @@ class BaseNetwork(nn.Module):
         for m in self.children():
             if hasattr(m, 'init_weights'):
                 m.init_weights(init_type, gain)
+
+    def update_per_epoch(self, epoch, num_epochs=None):
+        """update network per epoch"""
+        pass

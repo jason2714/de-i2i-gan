@@ -14,8 +14,99 @@ from metrics.inception import InceptionV3
 import torch
 from metrics.fid_score import calculate_fid_from_model
 from torchvision.utils import save_image
+from models.networks.normalization import SEAN, SPADE
+from collections import defaultdict
+from utils.util import visualize_embeddings
+from models.networks.architecture import SEANResBlock
 
 DATATYPE = ["defects", "background", "fusion"]
+
+layer_embeddings = defaultdict(list)
+layer_res_ratios = defaultdict(list)
+
+
+def check_residual_ratio(model, data_loader):
+    for attr_name, attr_value in model.networks['G'].named_modules():
+        if isinstance(attr_value, SEANResBlock):
+            attr_value.register_forward_hook(create_hook(attr_name, hook_type='res'))
+    pbar = tqdm(data_loader, colour='MAGENTA')
+    # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
+    for data, labels, _ in pbar:
+        pbar.set_description(f'Validating model ... ')
+        model('inference', data, labels, img_only=True)
+    for attr_name in layer_res_ratios.keys():
+        layer_res_ratios[attr_name] = torch.cat(layer_res_ratios[attr_name], dim=0).mean().item()
+        print(attr_name, layer_res_ratios[attr_name])
+
+
+def create_hook(attr_name, hook_type='sean'):
+    def sean_hook(model, input, output):
+        layer_embeddings[attr_name].append(output)
+
+    def res_block_hook(model, input, output):
+        res_output = output - input[0]
+        res_norm = res_output.view(res_output.size(0), -1).norm(dim=1)
+        input_norm = input[0].view(input[0].size(0), -1).norm(dim=1)
+        layer_res_ratios[attr_name].append(res_norm / (res_norm + input_norm))
+
+    if hook_type == 'sean':
+        return sean_hook
+    elif hook_type == 'res':
+        return res_block_hook
+    else:
+        raise ValueError(f'Unknown hook type {hook_type}')
+
+
+def get_sean_embeddings(model, data_loader, embed_type):
+    for attr_name, attr_value in model.networks['G'].named_modules():
+        if embed_type == 'hidden' and 'mlp_shared' in attr_name and \
+                isinstance(attr_value, torch.nn.modules.activation.ReLU):
+            attr_value.register_forward_hook(create_hook(attr_name, hook_type='sean'))
+        elif embed_type == 'mean' and 'mlp_beta' in attr_name and \
+                isinstance(attr_value, torch.nn.modules.linear.Linear):
+            attr_value.register_forward_hook(create_hook(attr_name, hook_type='sean'))
+        elif embed_type == 'std' and 'mlp_gamma' in attr_name and \
+                isinstance(attr_value, torch.nn.modules.linear.Linear):
+            attr_value.register_forward_hook(create_hook(attr_name, hook_type='sean'))
+
+    pbar = tqdm(data_loader, colour='MAGENTA')
+    # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
+    full_labels = []
+    for data, labels, _ in pbar:
+        full_labels.append(labels)
+        pbar.set_description(f"getting {embed_type} embeddings in sean's block ... ")
+        model('inference', data, labels, img_only=True)
+    full_labels = torch.cat(full_labels, dim=0)
+    new_layer_embeddings = dict()
+    for attr_name in layer_embeddings.keys():
+        layer_embeddings[attr_name] = torch.cat(layer_embeddings[attr_name], dim=0).cpu()
+        embeddings = defaultdict(list)
+        for label, embedding in zip(full_labels, layer_embeddings[attr_name]):
+            embeddings[tuple(label.int().tolist())].append(embedding)
+        new_layer_embeddings[attr_name] = embeddings
+    layer_embeddings.clear()
+    return new_layer_embeddings
+
+
+def visualize_sean_embeddings(opt, embeddings):
+    for attr_name in layer_embeddings.keys():
+        reduction_type = 'tsne'
+        plt_dir = opt.results_dir / opt.name / reduction_type
+        # plt_name = f'{opt.which_epoch}_{opt.phase}_{opt.data_type}_tsne_test.png'
+        plt_name = f'{attr_name}.png'
+        visualize_embeddings(embeddings, plt_dir, plt_name, reduction_type=reduction_type)
+
+
+def check_embeddings_std(mean_layer_embeddings, std_layer_embeddings):
+    for attr_name in mean_layer_embeddings.keys():
+        mean_embeddings = mean_layer_embeddings[attr_name]
+        print(attr_name)
+        print('=' * 20)
+        for label in mean_embeddings.keys():
+            correction = int(not (len(mean_embeddings[label]) == 1))
+            real_std = torch.stack(mean_embeddings[label]).std(dim=0, correction=correction).mean().item()
+            fake_std = torch.stack(std_layer_embeddings[attr_name][label]).mean(dim=0).mean().item()
+            print(label, f'{real_std:.4f}', f'{fake_std:.4f}')
 
 
 @torch.no_grad()
@@ -33,10 +124,10 @@ def main():
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     ])
     test_datasets = {
-        data_type: dataset_cls(opt, phase='test', data_type=data_type, transform=test_transform)
+        data_type: dataset_cls(opt, phase=opt.phase, data_type=data_type, transform=test_transform)
         for data_type in DATATYPE
     }
-    NUM_SAMPLES = {"defects": opt.num_imgs,
+    NUM_SAMPLES = {"defects": opt.num_imgs if opt.num_imgs > 0 else None,
                    "background": int(1e10),
                    "fusion": None}
     test_samplers = {
@@ -125,10 +216,22 @@ def main():
         print(f'Acc: {acc / len(data_loader.dataset):.3f} ({acc}/{len(data_loader.dataset)}), '
               f'Loss: {loss / len(data_loader):.3f}')
 
+    mean_embeddings = get_sean_embeddings(model, test_loaders['defects'], embed_type='mean')
+    std_embeddings = get_sean_embeddings(model, test_loaders['defects'], embed_type='std')
+    check_embeddings_std(mean_embeddings, std_embeddings)
+    # hidden_embeddings = get_sean_embeddings(model, test_loaders['defects'], embed_type='hidden')
+    # visualize_sean_embeddings(opt, mean_embeddings)
+    # check_residual_ratio(model, test_loaders['defects'])
+
+    # attr_name.replace(self.network_prefix, ''): attr_value
+    # for attr_name, attr_value in self.__dict__.items()
+    #     if attr_name.startswith(self.network_prefix) and isinstance(attr_value, torch.nn.Module)
+
 
 if __name__ == '__main__':
     main()
     '''
     python test_defectgan.py --data_dir A:/research/data --batch_size 4 --name org --save_img_grid
     python test_defectgan.py --name mae_shrink_token_2 --data_dir A:/research/data --batch_size 32 --add_noise --use_spectral --npz_path A:\research\data\codebrim\test\defects00.npz
+    python test_defectgan.py --data_dir A:/research/data --name org_sean_embed1 --use_spectral --add_noise --embed_path A:/research/de-i2i-gan/results/vit_shrink/latest_train_fusion_embeddings.pth --use_embed_only --style_norm_block_type sean --batch_size 32 --num_imgs -1
     '''

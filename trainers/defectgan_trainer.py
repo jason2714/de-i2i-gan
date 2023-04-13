@@ -76,6 +76,7 @@ class DefectGanTrainer(BaseTrainer):
                     self._val_epoch(val_loaders, epoch)
                     for metric in self.metrics:
                         writer.add_scalar(f'Metrics/{metric}', self.metrics[metric], epoch)
+            self._update_per_epoch(epoch)
         writer.close()
 
     def _train_epoch(self, data_loaders, epoch):
@@ -110,15 +111,12 @@ class DefectGanTrainer(BaseTrainer):
                              sd_con=f'{sum(self.losses["aux"]["con"]) / (len(self.losses["aux"]["con"]) + 1e-12):.4f}')
             # ,
             # dis_grad=f'{max(self.losses["dis_grad"]):.4f}')
-        for model_name in self.schedulers.keys():
-            self.schedulers[model_name].step()
 
     @torch.no_grad()
     def _val_epoch(self, data_loader, epoch):
         fid_value = calculate_fid_from_model(self.opt, self.model, self.inception_model, data_loader, 'Validating... ')
         print(f'FID: {fid_value} at epoch {epoch}')
         self.metrics['fid'] = fid_value
-
 
     def _train_generator_once(self, bg_data, df_labels, df_data):
         self.optimizers['G'].zero_grad()
@@ -150,3 +148,7 @@ class DefectGanTrainer(BaseTrainer):
         self.optimizers['D'].step()
         self.losses['gan']['D'].append(gan_loss.item())
         self.losses['clf']['D'].append(clf_loss.item())
+
+    def _update_per_epoch(self, epoch=None):
+        super()._update_per_epoch(epoch)
+        self.model.update_per_epoch(epoch, self.opt.num_epochs)

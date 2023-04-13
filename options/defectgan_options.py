@@ -31,6 +31,7 @@ class DefectGanBaseOptions(BaseOptions):
         parser.add_argument('--num_scales', type=int, default=2, help='# of gen scale layers')
         parser.add_argument('--num_res', type=int, default=6, help='# of gen resnet layers')
         parser.add_argument('--add_noise', action='store_true', default=False, help='whether to add noise in generator')
+        parser.add_argument('--style_norm_block_type', type=str, default='spade', help='[spade | sean | adain]')
 
         # for discriminator
         # parser.add_argument('--netD', type=str, default='defectgan', help='selects model to use for netD (wgan)')
@@ -55,6 +56,13 @@ class DefectGanBaseOptions(BaseOptions):
         parser.add_argument('--num_imgs', type=int, default=5_000, help='use # images to calculate FID score')
         parser.add_argument('--npz_path', type=str, default=None,
                             help='Paths to .npz statistic files (required if cal_fid is True)')
+
+        # for style embeddings
+        parser.add_argument('--embed_path', type=Path, default=None, help='Path to embedding file')
+        parser.add_argument('--use_embed_only', action='store_true', default=False,
+                            help='Whether to use embedding only in sean block')
+        parser.add_argument('--use_latent_only', action='store_true', default=False,
+                            help='Whether to use latent only')
 
         return parser
 

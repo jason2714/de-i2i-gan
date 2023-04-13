@@ -73,5 +73,6 @@ class TestOptions(ViTBaseOptions, BaseTestOptions):
                             help='whether to calculate classifier accuracy')
         parser.add_argument('--data_type', type=str, default='fusion',
                             help='which datatype to use, [ defects | background | fusion ]')
-
+        parser.add_argument('--num_embeddings_epochs', type=int, default=1,
+                            help='how many epochs for saving embeddings')
         return parser

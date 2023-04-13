@@ -78,3 +78,9 @@ class BaseModel:
             return mse_loss(logits, targets)
         else:
             raise ValueError(f"loss_type: {loss_type} is invalid")
+
+    def update_per_epoch(self, epoch, num_epochs=None):
+        """update networks per epoch"""
+        for network in self.networks.values():
+            if hasattr(network, 'update_per_epoch'):
+                network.update_per_epoch(epoch, num_epochs)

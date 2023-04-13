@@ -51,9 +51,13 @@ class MAETrainer(BaseTrainer):
                 repaired_grid = self.model('mae_generate_grid', data, labels)
                 writer.add_image(f'Images/{data_type}', repaired_grid, epoch)
 
-            # mask_token = self.model.mask_token.mask_token.detach().clone().squeeze(0)
-            # mask_token.clamp_(-1, 1).add_(1).div_(2)
-            # writer.add_image(f'Images/mask_token', mask_token, epoch)
+            mask_token = self.model.mask_token.mask_token.detach().clone()\
+                .view(self.opt.image_size, self.opt.image_size).cpu()
+            mask_token = mask_token - mask_token.min()
+            mask_token = mask_token / mask_token.max()
+            heatmap = cv2.cvtColor(cv2.applyColorMap(np.uint8(255 * mask_token), cv2.COLORMAP_JET), cv2.COLOR_BGR2RGB)
+            mask_token = torch.from_numpy(heatmap.transpose(2, 0, 1)).float() / 255
+            writer.add_image(f'Images/mask_token', mask_token, epoch)
 
     def train(self, train_loaders, val_loaders=None):
         """
@@ -68,6 +72,7 @@ class MAETrainer(BaseTrainer):
             self._write_tf_log(writer, epoch, val_loaders)
             if epoch % self.opt.save_ckpt_freq == 0:
                 self.model.save(epoch)
+            self._update_per_epoch(epoch)
         writer.close()
 
     def _train_epoch(self, data_loaders, epoch):
@@ -93,8 +98,6 @@ class MAETrainer(BaseTrainer):
                              clf_D=f'{sum(self.losses["clf"]["D"]) / (len(self.losses["clf"]["D"]) + 1e-12):.4f}',
                              clf_G=f'{sum(self.losses["clf"]["G"]) / (len(self.losses["clf"]["G"]) + 1e-12):.4f}')
 
-        for model_name in self.schedulers.keys():
-            self.schedulers[model_name].step()
 
     @torch.no_grad()
     def _val_epoch(self, data_loader, epoch):

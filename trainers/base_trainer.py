@@ -49,6 +49,7 @@ class BaseTrainer:
                                                        f'num_epochs {self.opt.num_epochs}'
         assert self.iters < self.opt.num_iters, f'iters {self.iters} should not larger than ' \
                                                 f'num_iters {self.opt.num_iters}'
+        self.opt.first_epoch = self.first_epoch
 
         # initial optimizer and scheduler
         self._init_lr(opt)
@@ -123,3 +124,8 @@ class BaseTrainer:
         for _ in range(self.first_epoch):
             for scheduler in self.schedulers.values():
                 scheduler.step()
+
+    def _update_per_epoch(self, epoch=None):
+        """called after each training epoch"""
+        for model_name in self.schedulers.keys():
+            self.schedulers[model_name].step()
