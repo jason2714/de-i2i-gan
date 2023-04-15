@@ -1,10 +1,12 @@
 from pathlib import Path
 import xml.etree.ElementTree as ET
 import json
+from collections import Counter
 
 
 def create_annos(anno_dir):
     label2idx_path = anno_dir / 'label2idx.json'
+    label_counts = dict()
     for file_path in anno_dir.iterdir():
         if file_path.suffix == '.xml':
 
@@ -40,6 +42,16 @@ def create_annos(anno_dir):
             json_labels_path = file_path.parent / f'{file_path.stem}.json'
             with json_labels_path.open('w') as fp:
                 json.dump(labels, fp, indent=2)
+            label_counts = {**label_counts, **Counter(list(map(tuple, labels.values())))}
+    json_labels_path = anno_dir / f'label_counts.json'
+    label_counts = {label_to_str(label): count for label, count in label_counts.items()}
+    with json_labels_path.open('w') as fp:
+        json.dump(label_counts, fp, indent=2)
+
+
+def label_to_str(label):
+    label_str = [str(idx) for idx, label_value in enumerate(label) if label_value == 1]
+    return '-'.join(label_str)
 
 
 if __name__ == '__main__':

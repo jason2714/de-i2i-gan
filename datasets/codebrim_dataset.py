@@ -4,6 +4,7 @@ import torch
 from torch.utils.data import Dataset
 from PIL import Image
 from data.codebrim.create_annos import create_annos
+from functools import reduce
 
 
 class CodeBrimDataset(Dataset):
@@ -39,12 +40,8 @@ class CodeBrimDataset(Dataset):
         # data_dirs = [opt.data_dir / opt.dataset_name / phase / crt_data_type for crt_data_type in data_types]
         self.data = [(filename, fn_label_map[filename.name])
                      for data_dir in data_dirs for filename in data_dir.iterdir() if filename.suffix == '.png']
-        # labels = [fn_label_map[filename.name]
-        #           for data_dir in data_dirs for filename in data_dir.iterdir() if filename.suffix == '.png']
-        # import numpy as np
-        # np_labels = np.array(labels)
-        # print(np_labels.sum(axis=0))
-        # exit()
+        # if filter_label is not None:
+        #     self.data = [data for data in self.data if tuple(data[1]) == tuple(filter_label)]
         self.data.sort()
         self.len = len(self.data)
 
@@ -57,4 +54,3 @@ class CodeBrimDataset(Dataset):
 
     def __len__(self):
         return self.len
-

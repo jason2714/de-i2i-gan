@@ -12,12 +12,14 @@ from models import create_model
 import numpy as np
 from metrics.inception import InceptionV3
 import torch
-from metrics.fid_score import calculate_fid_from_model
+from metrics.fid_score import calculate_fid_from_model, calculate_activation_statistics
 from torchvision.utils import save_image
 from models.networks.normalization import SEAN, SPADE
 from collections import defaultdict
 from utils.util import visualize_embeddings
 from models.networks.architecture import SEANResBlock
+import os
+from datasets.codebrim_dataset import CodeBrimDataset
 
 DATATYPE = ["defects", "background", "fusion"]
 
@@ -41,6 +43,8 @@ def check_residual_ratio(model, data_loader):
 
 def create_hook(attr_name, hook_type='sean'):
     def sean_hook(model, input, output):
+        if output.dim() == 3:
+            output = output.mean(dim=1)
         layer_embeddings[attr_name].append(output)
 
     def res_block_hook(model, input, output):
@@ -60,7 +64,8 @@ def create_hook(attr_name, hook_type='sean'):
 def get_sean_embeddings(model, data_loader, embed_type):
     for attr_name, attr_value in model.networks['G'].named_modules():
         if embed_type == 'hidden' and 'mlp_shared' in attr_name and \
-                isinstance(attr_value, torch.nn.modules.activation.ReLU):
+                (isinstance(attr_value, torch.nn.modules.activation.ReLU) or
+                 isinstance(attr_value, torch.nn.modules.linear.Linear)):
             attr_value.register_forward_hook(create_hook(attr_name, hook_type='sean'))
         elif embed_type == 'mean' and 'mlp_beta' in attr_name and \
                 isinstance(attr_value, torch.nn.modules.linear.Linear):
@@ -88,13 +93,12 @@ def get_sean_embeddings(model, data_loader, embed_type):
     return new_layer_embeddings
 
 
-def visualize_sean_embeddings(opt, embeddings):
-    for attr_name in layer_embeddings.keys():
-        reduction_type = 'tsne'
+def visualize_sean_embeddings(opt, embeddings, reduction_type):
+    for attr_name in embeddings.keys():
         plt_dir = opt.results_dir / opt.name / reduction_type
         # plt_name = f'{opt.which_epoch}_{opt.phase}_{opt.data_type}_tsne_test.png'
         plt_name = f'{attr_name}.png'
-        visualize_embeddings(embeddings, plt_dir, plt_name, reduction_type=reduction_type)
+        visualize_embeddings(embeddings[attr_name], plt_dir, plt_name, reduction_type=reduction_type)
 
 
 def check_embeddings_std(mean_layer_embeddings, std_layer_embeddings):
@@ -109,12 +113,40 @@ def check_embeddings_std(mean_layer_embeddings, std_layer_embeddings):
             print(label, f'{real_std:.4f}', f'{fake_std:.4f}')
 
 
+def save_stats(opt, dataset):
+    # load inception model
+    block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[opt.dims]
+    inception_model = InceptionV3([block_idx]).to(opt.device, non_blocking=True)
+    # must use model.eval() to ignore dropout and batchNorm, otherwise the value will break
+    inception_model.eval()
+
+    class_stats = dict()
+    for class_idx in range(1, opt.label_nc):
+        label = [0] * opt.label_nc
+        label[class_idx] = 1
+        label = tuple(label)
+        files = [data[0] for data in dataset.data if tuple(data[1]) == label]
+        print(f'calculating stats for class {label} with class size {len(files)}...')
+        stat = calculate_activation_statistics(files, inception_model, opt.batch_size, opt.dims, opt.device,
+                                               num_workers=4, num_img=opt.num_imgs)
+        class_stats[label] = stat
+
+        # print(stat[0].shape, stat[1].shape)
+    save_id = 0
+    save_path = dataset.data[0][0].parent.parent / f'stats_{save_id:02d}'
+    while os.path.exists(str(save_path) + '.npy'):
+        save_id += 1
+        save_path = dataset.data[0][0].parent.parent / f'stats_{save_id:02d}'
+    np.save(save_path, class_stats)
+
+
 @torch.no_grad()
 def main():
     fix_rand_seed()
     # defectgan_options
     opt = TestOptions().parse()
-    dataset_cls = find_dataset_using_name(opt.dataset_name)
+    # dataset_cls = find_dataset_using_name(opt.dataset_name)
+    dataset_cls = CodeBrimDataset
     opt.clf_loss_type = dataset_cls.clf_loss_type
 
     test_transform = transforms.Compose([
@@ -148,7 +180,8 @@ def main():
 
     # view_data_after_transform(opt, train_loaders)
     model = create_model(opt)
-    model.load(opt.which_epoch)
+    if not opt.save_stats:
+        model.load(opt.which_epoch)
 
     if opt.cal_fid:
         assert opt.npz_path is not None, 'npz_path should not be None if cal_fid is True'
@@ -157,8 +190,34 @@ def main():
         # must use model.eval() to ignore dropout and batchNorm, otherwise the value will break
         inception_model.eval()
 
-        fid_value = calculate_fid_from_model(opt, model, inception_model, test_loaders, 'Testing... ')
+        fid_value = calculate_fid_from_model(opt, model, inception_model,
+                                             test_loaders['background'], test_loaders['defects'],
+                                             opt.npz_path, 'Testing... ')
         print(f'FID: {fid_value} at epoch {opt.which_epoch}')
+
+    if opt.cal_mfid:
+
+        # load stats for each class from npz file
+        assert opt.npz_path is not None, 'npz_path should not be None if cal_mfid is True'
+        class_stats = np.load(opt.npz_path, allow_pickle=True).item()
+
+        # load inception model
+        block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[opt.dims]
+        inception_model = InceptionV3([block_idx]).to(opt.device, non_blocking=True)
+        # must use model.eval() to ignore dropout and batchNorm, otherwise the value will break
+        inception_model.eval()
+
+        class_fids = []
+        for class_idx in range(1, opt.label_nc):
+            label = [0] * opt.label_nc
+            label[class_idx] = 1
+            label = tuple(label)
+            fid_value = calculate_fid_from_model(opt, model, inception_model,
+                                                 test_loaders['background'], label,
+                                                 class_stats[label], 'Testing... ')
+            class_fids.append(fid_value)
+        print('FID for each class:', class_fids)
+        print(f'mFID: {sum(class_fids) / len(class_fids)} at epoch {opt.which_epoch}')
 
     if opt.save_img_grid:
         import json
@@ -216,16 +275,16 @@ def main():
         print(f'Acc: {acc / len(data_loader.dataset):.3f} ({acc}/{len(data_loader.dataset)}), '
               f'Loss: {loss / len(data_loader):.3f}')
 
-    mean_embeddings = get_sean_embeddings(model, test_loaders['defects'], embed_type='mean')
-    std_embeddings = get_sean_embeddings(model, test_loaders['defects'], embed_type='std')
-    check_embeddings_std(mean_embeddings, std_embeddings)
-    # hidden_embeddings = get_sean_embeddings(model, test_loaders['defects'], embed_type='hidden')
-    # visualize_sean_embeddings(opt, mean_embeddings)
-    # check_residual_ratio(model, test_loaders['defects'])
+    if opt.save_stats:
+        save_stats(opt, test_datasets['defects'])
 
-    # attr_name.replace(self.network_prefix, ''): attr_value
-    # for attr_name, attr_value in self.__dict__.items()
-    #     if attr_name.startswith(self.network_prefix) and isinstance(attr_value, torch.nn.Module)
+
+    # mean_embeddings = get_sean_embeddings(model, test_loaders['defects'], embed_type='mean')
+    # std_embeddings = get_sean_embeddings(model, test_loaders['defects'], embed_type='std')
+    # check_embeddings_std(mean_embeddings, std_embeddings)
+    # hidden_embeddings = get_sean_embeddings(model, test_loaders['defects'], embed_type='hidden')
+    # visualize_sean_embeddings(opt, hidden_embeddings, reduction_type='pca')
+    # check_residual_ratio(model, test_loaders['defects'])
 
 
 if __name__ == '__main__':

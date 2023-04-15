@@ -64,6 +64,7 @@ parser.add_argument('path', type=str, nargs=2,
                           'to .npz statistic files'))
 parser.add_argument('--num-imgs', type=int, nargs=2, default=[None, None], help='use # images to calculate FID score')
 parser.add_argument('--save_npz', action='store_true', help='whether save the first statistics to npz file')
+parser.add_argument('calc_mfid', action='store_true', help='whether calculate the mFID score')
 
 IMAGE_EXTENSIONS = {'bmp', 'jpg', 'jpeg', 'pgm', 'png', 'ppm',
                     'tif', 'tiff', 'webp'}
@@ -152,7 +153,6 @@ def get_activations(files, model, batch_size=50, dims=2048, device='cpu',
 
         start_idx = start_idx + pred.shape[0]
         # progress.update(pred.shape[0])
-
     return pred_arr
 
 
@@ -256,14 +256,19 @@ def compute_statistics_of_path(path, model, batch_size, dims, device,
     return m, s
 
 
-def calculate_fid_from_model(opt, model, inception_model, data_loader, description='Testing... '):
+def calculate_fid_from_model(opt, model, inception_model, data_loader, label_loader,
+                             input_stat, description='Testing... '):
     pred_arr = None
-    pbar = tqdm(data_loader['defects'], colour='MAGENTA')
+    if isinstance(label_loader, tuple):
+        num_batches = opt.num_imgs // opt.batch_size
+        labels = torch.FloatTensor(label_loader).view(1, -1).repeat(opt.batch_size, 1)
+        label_loader = [(_, labels[:], _) for _ in range(num_batches)]
+    pbar = tqdm(label_loader, colour='MAGENTA')
     # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
-    for df_data, df_labels, _ in pbar:
+    for _, df_labels, _ in pbar:
         pbar.set_description(description)
-        bg_data, bg_labels, _ = next(data_loader['background'])
-        bg_data, bg_labels = bg_data[:df_data.size(0)], bg_labels[:df_data.size(0)]
+        bg_data, bg_labels, _ = next(data_loader)
+        bg_data, bg_labels = bg_data[:df_labels.size(0)], bg_labels[:df_labels.size(0)]
         fake_imgs, _ = model('inference', bg_data, df_labels)
         # save_generated_images(opt, file_paths, fake_imgs)
         fake_imgs = (fake_imgs + 1) / 2
@@ -279,7 +284,7 @@ def calculate_fid_from_model(opt, model, inception_model, data_loader, descripti
             pred_arr = np.concatenate((pred_arr, pred), axis=0)
     mu = np.mean(pred_arr, axis=0)
     sigma = np.cov(pred_arr, rowvar=False)
-    fid_value = calculate_fid((opt.npz_path, [mu, sigma]), opt.batch_size,
+    fid_value = calculate_fid((input_stat, [mu, sigma]), opt.batch_size,
                               opt.device, opt.dims,
                               num_workers=4, model=inception_model)
     return fid_value
@@ -321,14 +326,30 @@ def main():
         num_workers = min(num_avail_cpus, 4)
     else:
         num_workers = args.num_workers
-    fid_value = calculate_fid(args.path,
-                              args.batch_size,
-                              device,
-                              args.dims,
-                              num_workers,
-                              args.num_imgs,
-                              args.save_npz)
-    print('FID: ', fid_value)
+    if args.calc_mfid:
+        fid_values = []
+        first_class_stats = np.load(args.path[0], allow_pickle=True).item()
+        second_class_stats = np.load(args.path[1], allow_pickle=True).item()
+        for label in first_class_stats.keys():
+            fid_value = calculate_fid((first_class_stats[label], second_class_stats[label]),
+                                      args.batch_size,
+                                      device,
+                                      args.dims,
+                                      num_workers,
+                                      args.num_imgs,
+                                      args.save_npz)
+            fid_values.append(fid_value)
+            print(f'FID for class {label}: {fid_value:.4f}')
+        print(f'mFID: {sum(fid_values) / len(fid_values)}')
+    else:
+        fid_value = calculate_fid(args.path,
+                                  args.batch_size,
+                                  device,
+                                  args.dims,
+                                  num_workers,
+                                  args.num_imgs,
+                                  args.save_npz)
+        print('FID: ', fid_value)
 
 
 if __name__ == '__main__':

@@ -3,9 +3,10 @@ import math
 
 import torch
 from torch import nn
+# from torch.nn.utils.parametrizations import spectral_norm
 from torch.nn.utils import spectral_norm
 import torch.nn.functional as F
-from .normalization import SPADE, SEAN
+from .normalization import SPADE, SEAN, SEAN
 
 
 def get_act_layer(act_str):

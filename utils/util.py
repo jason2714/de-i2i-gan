@@ -147,3 +147,8 @@ def calc_embeddings_mean_variance(embeddings):
                 mean2, var2 = embeddings[second_label]
                 print(f'{label_strs[first_label]:^8} vs {label_strs[second_label]:^8}: '
                       f'dist={torch.dist(mean1, mean2):.2f}, var1={var1.mean():.2f}, var2={var2.mean():.2f}')
+
+
+def label_to_str(label):
+    label_str = [str(idx) for idx, label_value in enumerate(label) if label_value == 1]
+    return '-'.join(label_str)

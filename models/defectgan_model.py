@@ -361,13 +361,13 @@ class DefectGanModel(BaseModel):
         if self.opt.use_latent_only:
             return None
         embed_list = []
-        num_embeds = 5
+        num_embeds = 3
         for label in labels:
             tuple_label = tuple(label.int().tolist())
             if not self.embeddings[tuple_label]:
                 mean_embed = torch.zeros(num_embeds, self.opt.embed_nc).to(self.netG.device)
             else:
-                embeds = random.choices(self.embeddings[tuple_label], k=5)
+                embeds = random.choices(self.embeddings[tuple_label], k=num_embeds)
                 # mean_embed = torch.stack(embeds).mean(dim=0)
                 mean_embed = torch.stack(embeds)
             embed_list.append(mean_embed)

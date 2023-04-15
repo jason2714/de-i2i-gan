@@ -1,5 +1,6 @@
 from metrics.fid_score import calculate_fid
 from metrics.inception import InceptionV3
+from metrics.lpips_score import calculate_lpips_from_model
 from trainers.base_trainer import BaseTrainer
 import torch
 from collections import defaultdict
@@ -11,6 +12,7 @@ from metrics.fid_score import calculate_fid_from_model
 from trainers.base_trainer import BaseTrainer
 import numpy as np
 import cv2
+from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
 
 class DefectGanTrainer(BaseTrainer):
@@ -25,9 +27,13 @@ class DefectGanTrainer(BaseTrainer):
         self.loss_types = ['gan', 'clf', 'aux']
         self._init_losses()
         if opt.phase == 'val':
+            print(f'Initialize Inception model for calculating FID score with dims {opt.dims}')
             block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[opt.dims]
             self.inception_model = InceptionV3([block_idx]).to(opt.device, non_blocking=True)
             self.inception_model.eval()
+
+            print(f'Initialize LPIPS model for calculating LPIPS score')
+            self.lpips = LearnedPerceptualImagePatchSimilarity().to(device=opt.device)
 
     def _init_lr(self, opt):
         assert len(opt.lr) in (1, 2), f'length of lr must be 1 or 2, not {len(opt.lr)}'
@@ -80,14 +86,14 @@ class DefectGanTrainer(BaseTrainer):
         writer.close()
 
     def _train_epoch(self, data_loaders, epoch):
-        lrs = ', '.join([f'lr_{model_name}: {self.schedulers[model_name].get_last_lr()[0]:.5f}'
-                         for model_name in self.schedulers.keys()])
+        # lrs = ', '.join([f'lr_{model_name}: {self.schedulers[model_name].get_last_lr()[0]:.5f}'
+        #                  for model_name in self.schedulers.keys()])
         pbar = tqdm(data_loaders['defects'], colour='MAGENTA')
         # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
         for df_data, df_labels, _ in pbar:
             self.iters += 1
             pbar.set_description(f'Epoch: [{epoch}/{self.opt.num_epochs}], '
-                                 f'Iter: [{self.iters}/{self.opt.num_iters}], {lrs}')
+                                 f'Iter: [{self.iters}/{self.opt.num_iters}], lw_con: {self.loss_weights["sd_con"]}')
 
             # get bg data and truncate them to the same as batch_size of defect data
             bg_data, bg_labels, _ = next(data_loaders['background'])
@@ -114,9 +120,15 @@ class DefectGanTrainer(BaseTrainer):
 
     @torch.no_grad()
     def _val_epoch(self, data_loader, epoch):
-        fid_value = calculate_fid_from_model(self.opt, self.model, self.inception_model, data_loader, 'Validating... ')
+        fid_value = calculate_fid_from_model(self.opt, self.model, self.inception_model,
+                                             data_loader['background'], data_loader['defects'],
+                                             self.opt.npz_path, 'Calculating FID score... ')
         print(f'FID: {fid_value} at epoch {epoch}')
         self.metrics['fid'] = fid_value
+
+        lpips_score = calculate_lpips_from_model(self.opt, self.model, self.lpips, data_loader)
+        print(f'LPIPS: {lpips_score} at epoch {epoch}')
+        self.metrics['lpips'] = lpips_score
 
     def _train_generator_once(self, bg_data, df_labels, df_data):
         self.optimizers['G'].zero_grad()
@@ -152,3 +164,7 @@ class DefectGanTrainer(BaseTrainer):
     def _update_per_epoch(self, epoch=None):
         super()._update_per_epoch(epoch)
         self.model.update_per_epoch(epoch, self.opt.num_epochs)
+        if sum(self.losses['aux']['con']) / len(self.losses['aux']['con']) < 1e-5:
+            self.loss_weights['sd_con'] = max(self.loss_weights['sd_con'] / 2, 1)
+        elif sum(self.losses['aux']['con']) / len(self.losses['aux']['con']) >= 0.3:
+            self.loss_weights['sd_con'] *= 2
