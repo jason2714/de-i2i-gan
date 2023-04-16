@@ -1,6 +1,8 @@
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
+from torchmetrics.image import LearnedPerceptualImagePatchSimilarity
 
 from datasets import find_dataset_using_name
+from metrics.defectgan_metrics import calculate_metrics_from_model
 from options.defectgan_options import TestOptions
 from utils.util import worker_init_fn
 from torchvision import transforms
@@ -183,17 +185,23 @@ def main():
     if not opt.save_stats:
         model.load(opt.which_epoch)
 
-    if opt.cal_fid:
-        assert opt.npz_path is not None, 'npz_path should not be None if cal_fid is True'
-        block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[opt.dims]
-        inception_model = InceptionV3([block_idx]).to(opt.device, non_blocking=True)
-        # must use model.eval() to ignore dropout and batchNorm, otherwise the value will break
-        inception_model.eval()
+    if opt.metrics is not None:
+        metrics = {metric: None for metric in opt.metrics}
+        metric_models = dict()
+        if 'fid' or 'is' in opt.metrics:
+            block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[opt.dims]
+            metric_models['inception'] = InceptionV3([block_idx]).to(opt.device, non_blocking=True)
+            # must use model.eval() to ignore dropout and batchNorm, otherwise the value will break
+            metric_models['inception'].eval()
+        if 'lpips' in opt.metrics:
+            metric_models['lpips'] = LearnedPerceptualImagePatchSimilarity(weights='DEFAULT').to(device=opt.device)
+            metric_models['lpips'].eval()
 
-        fid_value = calculate_fid_from_model(opt, model, inception_model,
-                                             test_loaders['background'], test_loaders['defects'],
-                                             opt.npz_path, 'Testing... ')
-        print(f'FID: {fid_value} at epoch {opt.which_epoch}')
+        metrics = calculate_metrics_from_model(opt, model,
+                                               test_loaders['background'], test_loaders['defects'],
+                                               metric_models, metrics)
+        for metric_names in opt.metrics:
+            print(f'{metric_names}: {metrics[metric_names]} at epoch {opt.which_epoch}')
 
     if opt.cal_mfid:
 
@@ -277,7 +285,6 @@ def main():
 
     if opt.save_stats:
         save_stats(opt, test_datasets['defects'])
-
 
     # mean_embeddings = get_sean_embeddings(model, test_loaders['defects'], embed_type='mean')
     # std_embeddings = get_sean_embeddings(model, test_loaders['defects'], embed_type='std')

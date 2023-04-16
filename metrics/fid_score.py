@@ -272,7 +272,8 @@ def calculate_fid_from_model(opt, model, inception_model, data_loader, label_loa
         fake_imgs, _ = model('inference', bg_data, df_labels)
         # save_generated_images(opt, file_paths, fake_imgs)
         fake_imgs = (fake_imgs + 1) / 2
-        pred = inception_model(fake_imgs)[0]
+        out = inception_model(fake_imgs)
+        pred = out[0]
         # If model output is not scalar, apply global spatial average pooling.
         # This happens if you choose a dimensionality not equal 2048.
         if pred.size(2) != 1 or pred.size(3) != 1:

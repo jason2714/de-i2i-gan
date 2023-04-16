@@ -361,7 +361,7 @@ class DefectGanModel(BaseModel):
         if self.opt.use_latent_only:
             return None
         embed_list = []
-        num_embeds = 3
+        num_embeds = 1
         for label in labels:
             tuple_label = tuple(label.int().tolist())
             if not self.embeddings[tuple_label]:

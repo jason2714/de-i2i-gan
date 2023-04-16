@@ -122,6 +122,7 @@ class InceptionV3(nn.Module):
             ]
             self.blocks.append(nn.Sequential(*block3))
 
+        self.clf = inception.fc
         for param in self.parameters():
             param.requires_grad = requires_grad
 
@@ -156,7 +157,7 @@ class InceptionV3(nn.Module):
 
             if idx == self.last_needed_block:
                 break
-
+        outp.append(self.clf(x.view(x.size(0), -1)))
         return outp
 
 

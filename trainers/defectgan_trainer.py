@@ -13,6 +13,7 @@ from trainers.base_trainer import BaseTrainer
 import numpy as np
 import cv2
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
+from metrics.defectgan_metrics import calculate_metrics_from_model
 
 
 class DefectGanTrainer(BaseTrainer):
@@ -27,13 +28,17 @@ class DefectGanTrainer(BaseTrainer):
         self.loss_types = ['gan', 'clf', 'aux']
         self._init_losses()
         if opt.phase == 'val':
+            self.metrics = {'fid': None,
+                            'is': None,
+                            'lpips': None}
+            self.metric_models = dict()
             print(f'Initialize Inception model for calculating FID score with dims {opt.dims}')
             block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[opt.dims]
-            self.inception_model = InceptionV3([block_idx]).to(opt.device, non_blocking=True)
-            self.inception_model.eval()
+            self.metric_models['inception'] = InceptionV3([block_idx]).to(opt.device, non_blocking=True)
+            self.metric_models['inception'].eval()
 
             print(f'Initialize LPIPS model for calculating LPIPS score')
-            self.lpips = LearnedPerceptualImagePatchSimilarity().to(device=opt.device)
+            self.metric_models['lpips'] = LearnedPerceptualImagePatchSimilarity().to(device=opt.device)
 
     def _init_lr(self, opt):
         assert len(opt.lr) in (1, 2), f'length of lr must be 1 or 2, not {len(opt.lr)}'
@@ -79,9 +84,7 @@ class DefectGanTrainer(BaseTrainer):
             if epoch % self.opt.save_ckpt_freq == 0:
                 self.model.save(epoch)
                 if self.opt.phase == 'val':
-                    self._val_epoch(val_loaders, epoch)
-                    for metric in self.metrics:
-                        writer.add_scalar(f'Metrics/{metric}', self.metrics[metric], epoch)
+                    self._val_epoch(val_loaders, epoch, writer)
             self._update_per_epoch(epoch)
         writer.close()
 
@@ -119,16 +122,18 @@ class DefectGanTrainer(BaseTrainer):
             # dis_grad=f'{max(self.losses["dis_grad"]):.4f}')
 
     @torch.no_grad()
-    def _val_epoch(self, data_loader, epoch):
-        fid_value = calculate_fid_from_model(self.opt, self.model, self.inception_model,
-                                             data_loader['background'], data_loader['defects'],
-                                             self.opt.npz_path, 'Calculating FID score... ')
-        print(f'FID: {fid_value} at epoch {epoch}')
-        self.metrics['fid'] = fid_value
+    def _val_epoch(self, data_loader, epoch, writer):
+        self.metrics = calculate_metrics_from_model(self.opt, self.model,
+                                                    data_loader['background'], data_loader['defects'],
+                                                    self.metric_models, self.metrics)
+        for metric in self.metrics:
+            if isinstance(self.metrics[metric], dict):
+                writer.add_scalars(f'Metrics/{metric}', self.metrics[metric], epoch)
+            else:
+                writer.add_scalar(f'Metrics/{metric}', self.metrics[metric], epoch)
 
-        lpips_score = calculate_lpips_from_model(self.opt, self.model, self.lpips, data_loader)
-        print(f'LPIPS: {lpips_score} at epoch {epoch}')
-        self.metrics['lpips'] = lpips_score
+        for metric_names in self.metrics:
+            print(f'{metric_names}: {self.metrics[metric_names]} at epoch {epoch}')
 
     def _train_generator_once(self, bg_data, df_labels, df_data):
         self.optimizers['G'].zero_grad()

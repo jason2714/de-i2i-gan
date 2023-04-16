@@ -112,8 +112,8 @@ class TestOptions(DefectGanBaseOptions, BaseTestOptions):
         BaseTestOptions.initialize(self, parser)
 
         # for testing
-        parser.add_argument('--cal_fid', action='store_true', default=False,
-                            help='whether to calculate FID score or not')
+        parser.add_argument('--metrics', type=str, nargs='+', default=None,
+                            help='metrics to calculate [fid|is|lpips]')
         parser.add_argument('--cal_mfid', action='store_true', default=False,
                             help='whether to calculate mFID score or not')
         parser.add_argument('--save_img_grid', action='store_true', default=False,
