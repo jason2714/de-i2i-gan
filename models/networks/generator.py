@@ -1,6 +1,6 @@
 from models.networks.base_network import BaseNetwork
 from models.networks.architecture import DeConvBlock, ConvBlock, ResBlock, \
-    SPADEResBlock, SPADEConvBlock, UnetBlock, ResnetSubModule, SEANResBlock, SEANConvBlock
+    SPADEResBlock, SPADEConvBlock, UnetBlock, ResnetSubModule, SEANResBlock, SEANConvBlock, SEAN
 import torch
 from torch import nn
 import math
@@ -55,6 +55,7 @@ class DefectGanGenerator(BaseNetwork):
         """
         super().__init__()
         assert (opt.num_res & 1) == 0, 'num_res must be even'
+        self.opt = opt
         self.cycle_gan = opt.cycle_gan
         self.label_nc = opt.label_nc
         self.skip_conn = opt.skip_conn
@@ -147,7 +148,6 @@ class DefectGanGenerator(BaseNetwork):
                                                      add_noise=opt.add_noise))
                 elif opt.style_norm_block_type == 'sean':
                     dec_res_blk.append(SEANResBlock(opt.embed_nc, opt.label_nc, crt_dim, crt_dim,
-                                                    opt.use_embed_only,
                                                     kernel_size=(3, 3),
                                                     stride=(1, 1),
                                                     padding='same',
@@ -174,7 +174,6 @@ class DefectGanGenerator(BaseNetwork):
                                                       add_noise=opt.add_noise))
                 elif opt.style_norm_block_type == 'sean':
                     de_conv_blk.append(SEANConvBlock(opt.embed_nc, opt.label_nc, crt_dim, crt_dim // 2,
-                                                     opt.use_embed_only,
                                                      kernel_size=(3, 3),
                                                      stride=(1, 1),
                                                      padding='same',
@@ -253,12 +252,13 @@ class DefectGanGenerator(BaseNetwork):
         else:
             return output, spatial_prob
 
-    def update_per_epoch(self, epoch, num_epochs=None):
-        super(DefectGanGenerator, self).update_per_epoch(epoch, num_epochs)
-        for dec_res_blk in self.dec_res_blk:
-            if isinstance(dec_res_blk, (SEANResBlock, SEANConvBlock)):
-                dec_res_blk.update_alpha(epoch, num_epochs)
-        for dec_blk in self.dec_blk:
-            if isinstance(dec_blk, (SEANResBlock, SEANConvBlock)):
-                dec_blk.update_alpha(epoch, num_epochs)
+    def update_per_epoch(self, epoch):
+        super(DefectGanGenerator, self).update_per_epoch(epoch)
+        alpha = (1 + math.cos(math.pi * epoch / self.opt.num_epochs)) / 2
+        if self.opt.style_norm_block_type == 'sean' and self.opt.sean_alpha is None:
+            self.set_sean_alpha(alpha)
 
+    def set_sean_alpha(self, alpha):
+        for attr_name, attr_value in self.named_modules():
+            if isinstance(attr_value, SEAN):
+                attr_value.set_alpha(alpha)

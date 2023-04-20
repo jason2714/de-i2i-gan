@@ -59,10 +59,9 @@ class DefectGanBaseOptions(BaseOptions):
 
         # for style embeddings
         parser.add_argument('--embed_path', type=Path, default=None, help='Path to embedding file')
-        parser.add_argument('--use_embed_only', action='store_true', default=False,
-                            help='Whether to use embedding only in sean block')
-        parser.add_argument('--use_latent_only', action='store_true', default=False,
-                            help='Whether to use latent only')
+        parser.add_argument('--num_embeds', type=int, default=3, help='Number of embeddings to use')
+        parser.add_argument('--sean_alpha', type=float, default=None, help='Initial alpha value for SEAN block, '
+                                 'if 1 then use embedding only, if 0 then use latent only')
 
         return parser
 
@@ -124,6 +123,8 @@ class TestOptions(DefectGanBaseOptions, BaseTestOptions):
                             help='whether to save generated image stats or not')
         parser.add_argument('--cal_clf', action='store_true', default=False,
                             help='whether to calculate classifier accuracy or not')
+        parser.add_argument('--vis_style_embeds', type=str, default=None,
+                            help='whether to visualize sean embeddings or not, type of [hidden|mean]')
 
         return parser
 

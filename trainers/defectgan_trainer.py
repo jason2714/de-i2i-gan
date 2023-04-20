@@ -168,7 +168,7 @@ class DefectGanTrainer(BaseTrainer):
 
     def _update_per_epoch(self, epoch=None):
         super()._update_per_epoch(epoch)
-        self.model.update_per_epoch(epoch, self.opt.num_epochs)
+        self.model.update_per_epoch(epoch)
         if sum(self.losses['aux']['con']) / len(self.losses['aux']['con']) < 1e-5:
             self.loss_weights['sd_con'] = max(self.loss_weights['sd_con'] / 2, 1)
         elif sum(self.losses['aux']['con']) / len(self.losses['aux']['con']) >= 0.3:

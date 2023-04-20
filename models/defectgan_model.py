@@ -29,11 +29,15 @@ class DefectGanModel(BaseModel):
         self.mask_token = MaskToken(opt).to(opt.device, non_blocking=True)
 
         # style embedding
-        if opt.style_norm_block_type == 'sean' and not opt.use_latent_only:
-            assert opt.embed_path is not None, 'embed_path should be initialized if style_norm_block_type is sean'
-            self.embeddings = torch.load(opt.embed_path)
-            for label, embeds in self.embeddings.items():
-                self.embeddings[label] = [embed.to(opt.device, non_blocking=True) for embed in embeds]
+        if opt.style_norm_block_type == 'sean':
+            if self.opt.sean_alpha is not None:
+                self.netG.set_sean_alpha(self.opt.sean_alpha)
+            if opt.sean_alpha != 0:
+                assert opt.embed_path is not None, 'embed_path should be initialized ' \
+                                                   'if style_norm_block_type is sean and sean_alpha is not 0'
+                self.embeddings = torch.load(opt.embed_path)
+                for label, embeds in self.embeddings.items():
+                    self.embeddings[label] = [embed.to(opt.device, non_blocking=True) for embed in embeds]
 
     def __call__(self, mode, data, labels, df_data=None, img_only=False):
         # for mae
@@ -358,10 +362,10 @@ class DefectGanModel(BaseModel):
         return seg
 
     def _get_style_embeds(self, labels):
-        if self.opt.use_latent_only:
+        if self.opt.sean_alpha == 0:
             return None
         embed_list = []
-        num_embeds = 1
+        num_embeds = random.randint(1, self.opt.num_embeds)
         for label in labels:
             tuple_label = tuple(label.int().tolist())
             if not self.embeddings[tuple_label]:

@@ -43,10 +43,12 @@ def check_residual_ratio(model, data_loader):
         print(attr_name, layer_res_ratios[attr_name])
 
 
-def create_hook(attr_name, hook_type='sean'):
-    def sean_hook(model, input, output):
+def create_hook(attr_name, hook_type='style'):
+    def style_block_hook(model, input, output):
         if output.dim() == 3:
             output = output.mean(dim=1)
+        elif isinstance(model, torch.nn.modules.conv.Conv2d) and output.dim() == 4:
+            output = output.mean(dim=[2, 3])
         layer_embeddings[attr_name].append(output)
 
     def res_block_hook(model, input, output):
@@ -55,33 +57,30 @@ def create_hook(attr_name, hook_type='sean'):
         input_norm = input[0].view(input[0].size(0), -1).norm(dim=1)
         layer_res_ratios[attr_name].append(res_norm / (res_norm + input_norm))
 
-    if hook_type == 'sean':
-        return sean_hook
+    if hook_type == 'style':
+        return style_block_hook
     elif hook_type == 'res':
         return res_block_hook
     else:
         raise ValueError(f'Unknown hook type {hook_type}')
 
 
-def get_sean_embeddings(model, data_loader, embed_type):
+def get_style_embeddings(model, data_loader, embed_type):
     for attr_name, attr_value in model.networks['G'].named_modules():
-        if embed_type == 'hidden' and 'mlp_shared' in attr_name and \
-                (isinstance(attr_value, torch.nn.modules.activation.ReLU) or
-                 isinstance(attr_value, torch.nn.modules.linear.Linear)):
-            attr_value.register_forward_hook(create_hook(attr_name, hook_type='sean'))
-        elif embed_type == 'mean' and 'mlp_beta' in attr_name and \
-                isinstance(attr_value, torch.nn.modules.linear.Linear):
-            attr_value.register_forward_hook(create_hook(attr_name, hook_type='sean'))
-        elif embed_type == 'std' and 'mlp_gamma' in attr_name and \
-                isinstance(attr_value, torch.nn.modules.linear.Linear):
-            attr_value.register_forward_hook(create_hook(attr_name, hook_type='sean'))
+        if embed_type == 'hidden' and ('mlp_shared' in attr_name or 'mlp_latent' in attr_name) and \
+                isinstance(attr_value, torch.nn.modules.container.Sequential):
+            attr_value.register_forward_hook(create_hook(attr_name, hook_type='style'))
+        elif embed_type == 'mean' and 'mlp_beta' in attr_name:
+            attr_value.register_forward_hook(create_hook(attr_name, hook_type='style'))
+        elif embed_type == 'std' and 'mlp_gamma' in attr_name:
+            attr_value.register_forward_hook(create_hook(attr_name, hook_type='style'))
 
     pbar = tqdm(data_loader, colour='MAGENTA')
     # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
     full_labels = []
     for data, labels, _ in pbar:
         full_labels.append(labels)
-        pbar.set_description(f"getting {embed_type} embeddings in sean's block ... ")
+        pbar.set_description(f"getting {embed_type} embeddings in style blocks... ")
         model('inference', data, labels, img_only=True)
     full_labels = torch.cat(full_labels, dim=0)
     new_layer_embeddings = dict()
@@ -95,11 +94,12 @@ def get_sean_embeddings(model, data_loader, embed_type):
     return new_layer_embeddings
 
 
-def visualize_sean_embeddings(opt, embeddings, reduction_type):
+def visualize_style_embeddings(opt, embeddings, reduction_type):
     for attr_name in embeddings.keys():
         plt_dir = opt.results_dir / opt.name / reduction_type
         # plt_name = f'{opt.which_epoch}_{opt.phase}_{opt.data_type}_tsne_test.png'
         plt_name = f'{attr_name}.png'
+        print(f'saving embeddings for {attr_name} to {plt_dir / plt_name}')
         visualize_embeddings(embeddings[attr_name], plt_dir, plt_name, reduction_type=reduction_type)
 
 
@@ -285,12 +285,12 @@ def main():
 
     if opt.save_stats:
         save_stats(opt, test_datasets['defects'])
-
-    # mean_embeddings = get_sean_embeddings(model, test_loaders['defects'], embed_type='mean')
-    # std_embeddings = get_sean_embeddings(model, test_loaders['defects'], embed_type='std')
+    if opt.vis_style_embeds is not None:
+        embeddings = get_style_embeddings(model, test_loaders['defects'], embed_type=opt.vis_style_embeds)
+        visualize_style_embeddings(opt, embeddings, reduction_type='pca')
+    # mean_embeddings = get_style_embeddings(model, test_loaders['defects'], embed_type='mean')
+    # std_embeddings = get_style_embeddings(model, test_loaders['defects'], embed_type='std')
     # check_embeddings_std(mean_embeddings, std_embeddings)
-    # hidden_embeddings = get_sean_embeddings(model, test_loaders['defects'], embed_type='hidden')
-    # visualize_sean_embeddings(opt, hidden_embeddings, reduction_type='pca')
     # check_residual_ratio(model, test_loaders['defects'])
 
 
@@ -299,5 +299,6 @@ if __name__ == '__main__':
     '''
     python test_defectgan.py --data_dir A:/research/data --batch_size 4 --name org --save_img_grid
     python test_defectgan.py --name mae_shrink_token_2 --data_dir A:/research/data --batch_size 32 --add_noise --use_spectral --npz_path A:\research\data\codebrim\test\defects00.npz
-    python test_defectgan.py --data_dir A:/research/data --name org_sean_embed1 --use_spectral --add_noise --embed_path A:/research/de-i2i-gan/results/vit_shrink/latest_train_fusion_embeddings.pth --use_embed_only --style_norm_block_type sean --batch_size 32 --num_imgs -1
+    python test_defectgan.py --data_dir A:/research/data --name org_sean_embed1 --use_spectral --add_noise --batch_size 32 --npz_path A:\research\data\codebrim\test\defects00.npz --num_imgs -1
+    --embed_path A:/research/de-i2i-gan/results/vit_shrink/latest_train_fusion_embeddings.pth --style_norm_block_type sean --sean_alpha 1 
     '''

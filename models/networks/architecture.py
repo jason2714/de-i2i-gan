@@ -427,7 +427,6 @@ class ResnetSubModule(nn.Module):
 
 class SEANConvBlock(nn.Module):
     def __init__(self, embed_nc, label_nc, f_in, f_out,
-                 use_embed_only=False,
                  kernel_size=(3, 3),
                  stride=(1, 1),
                  padding=0,
@@ -457,7 +456,7 @@ class SEANConvBlock(nn.Module):
         else:
             self.noise = nn.Identity()
 
-        self.sean_norm = SEAN(embed_nc, f_in, label_nc, norm_layer=norm_layer, use_embed_only=use_embed_only)
+        self.sean_norm = SEAN(embed_nc, f_in, label_nc, norm_layer=norm_layer)
         self.conv = nn.Conv2d(f_in, f_out,
                               kernel_size=kernel_size,
                               stride=stride,
@@ -483,7 +482,6 @@ class SEANConvBlock(nn.Module):
 
 class SEANResBlock(nn.Module):
     def __init__(self, embed_nc, label_nc, f_in, f_out,
-                 use_embed_only=False,
                  kernel_size=(3, 3),
                  stride=(1, 1),
                  padding=0,
@@ -510,9 +508,9 @@ class SEANResBlock(nn.Module):
             self.noise_1 = nn.Identity()
 
         f_mid = min(f_in, f_out)
-        self.sean_norm_0 = SEAN(embed_nc, f_in, label_nc, norm_layer=norm_layer, use_embed_only=use_embed_only)
-        self.sean_norm_1 = SEAN(embed_nc, f_mid, label_nc, norm_layer=norm_layer, use_embed_only=use_embed_only)
-        self.sean_norm_s = SEAN(embed_nc, f_in, label_nc, norm_layer=norm_layer, use_embed_only=use_embed_only)
+        self.sean_norm_0 = SEAN(embed_nc, f_in, label_nc, norm_layer=norm_layer)
+        self.sean_norm_1 = SEAN(embed_nc, f_mid, label_nc, norm_layer=norm_layer)
+        self.sean_norm_s = SEAN(embed_nc, f_in, label_nc, norm_layer=norm_layer)
         self.act = get_act_layer(act_layer)
         self.conv_0 = nn.Conv2d(f_in, f_mid,
                                 kernel_size=kernel_size,

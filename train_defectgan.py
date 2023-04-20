@@ -125,6 +125,6 @@ if __name__ == '__main__':
     python train_defectgan.py --name org_lw_wo_resize --continue_training --load_from_opt_file
     tensorboard --logdir log\test_df --samples_per_plugin "images=100"
     python train_defectgan.py --data_dir A:/research/data --name org_shrink --loss_weight 2 5 10 1 3 --npz_path A:/research/data/codebrim/val/defects00.npz --phase val --add_noise --use_spectral --scheduler cos --num_iters 20_000 --save_latest_freq 200
-     --embed_path A:/research/de-i2i-gan/results/vit_shrink/latest_train_fusion_embeddings.pth --use_embed_only --dataset_name codebrim_shrink --style_norm_block_type sean
+    --style_norm_block_type sean --embed_path A:/research/de-i2i-gan/results/vit_shrink/latest_train_fusion_embeddings.pth
      python train_defectgan.py --name org_mae_shrink_token_zero --data_dir A:/research/data --load_model_name mae_shrink_token_zero --loss_weight 2 5 10 1 3 --npz_path A:/research/data/codebrim/val/defects00.npz --phase val --add_noise --use_spectral --scheduler cos --num_iters 20_000 --save_latest_freq 200 --dataset_name codebrim_shrink
     '''
