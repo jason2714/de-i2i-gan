@@ -23,7 +23,6 @@ class DefectGanBaseOptions(BaseOptions):
         parser.add_argument('--batch_size', type=int, default=4, help='input batch size')
         parser.add_argument('--image_size', type=int, default=128, help='input image size')
         parser.add_argument('--label_nc', type=int, default=6, help='# of label classes')
-        parser.add_argument('--embed_nc', type=int, default=768, help='# of embedding classes, [768 | 1024]')
 
         # for generator
         # parser.add_argument('--netG', type=str, default='defectgan', help='selects model to use for netG (wgan)')
@@ -32,6 +31,7 @@ class DefectGanBaseOptions(BaseOptions):
         parser.add_argument('--num_res', type=int, default=6, help='# of gen resnet layers')
         parser.add_argument('--add_noise', action='store_true', default=False, help='whether to add noise in generator')
         parser.add_argument('--style_norm_block_type', type=str, default='spade', help='[spade | sean | adain]')
+        parser.add_argument('--hidden_nc', type=int, default=128, help='# of hidden channels in normalization layer')
 
         # for discriminator
         # parser.add_argument('--netD', type=str, default='defectgan', help='selects model to use for netD (wgan)')
@@ -58,8 +58,10 @@ class DefectGanBaseOptions(BaseOptions):
                             help='Paths to .npz statistic files (required if cal_fid is True)')
 
         # for style embeddings
+        parser.add_argument('--embed_nc', type=int, default=768, help='# of embedding classes, [768 | 1024]')
+        parser.add_argument('--latent_dim', type=int, default=16, help='# of latent dimension')
         parser.add_argument('--embed_path', type=Path, default=None, help='Path to embedding file')
-        parser.add_argument('--num_embeds', type=int, default=3, help='Number of embeddings to use')
+        parser.add_argument('--num_embeds', type=int, default=5, help='Number of embeddings to use')
         parser.add_argument('--sean_alpha', type=float, default=None, help='Initial alpha value for SEAN block, '
                                  'if 1 then use embedding only, if 0 then use latent only')
 
@@ -159,7 +161,7 @@ class PreTrainOptions(DefectGanBaseOptions, BaseTrainOptions):
                                  'e.g. [lr] or [lr_d, lr_g]')
         parser.add_argument('--scheduler', type=str, default='cos', help='type of scheduler [step|exp|cos]')
         parser.add_argument('--lr_decay', type=float, default=0.05, help='learning rate decay for optimizer')
-        parser.add_argument('--loss_weight', type=int, nargs='+', default=[10, 3, 1],
+        parser.add_argument('--loss_weight', type=int, nargs='+', default=[5, 3, 2],
                             help='aggregation weight for each loss, [rec, cls_d, cls_g]')
         parser.add_argument('--num_critics', type=int, default=1,
                             help='number of discriminator iterations per generator iterations.')

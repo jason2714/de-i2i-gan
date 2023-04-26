@@ -22,6 +22,7 @@ from utils.util import visualize_embeddings
 from models.networks.architecture import SEANResBlock
 import os
 from datasets.codebrim_dataset import CodeBrimDataset
+from torchsummary import summary
 
 DATATYPE = ["defects", "background", "fusion"]
 
@@ -288,6 +289,14 @@ def main():
     if opt.vis_style_embeds is not None:
         embeddings = get_style_embeddings(model, test_loaders['defects'], embed_type=opt.vis_style_embeds)
         visualize_style_embeddings(opt, embeddings, reduction_type='pca')
+
+    # model.netG.train()
+    # summary(model.netG, [(3, 128, 128), (6, 1, 1)], depth=4)
+    # model.netG.print_network()
+    # model.netD.train()
+    # summary(model.netD, (3, 128, 128))
+    # model.netD.print_network()
+
     # mean_embeddings = get_style_embeddings(model, test_loaders['defects'], embed_type='mean')
     # std_embeddings = get_style_embeddings(model, test_loaders['defects'], embed_type='std')
     # check_embeddings_std(mean_embeddings, std_embeddings)

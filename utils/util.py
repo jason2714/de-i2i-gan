@@ -71,6 +71,19 @@ def generate_shifted_mask(image_size, patch_size, mask_ratio):
     return mask
 
 
+def calc_mean_std(feat, eps=1e-5):
+    """
+        input feat: (b, c, h, w) or (b, n, c)
+        return mean: (b, c, 1, 1), std: (b, c, 1, 1)
+    """
+    if feat.dim() == 3:
+        return calc_embed_mean_std(feat, eps=eps)
+    elif feat.dim() == 4:
+        return calc_feat_mean_std(feat, eps=eps)
+    else:
+        raise ValueError('Wrong feature dimension: {}'.format(feat.dim()))
+
+
 def calc_feat_mean_std(feat, eps=1e-5):
     # eps is a small value added to the variance to avoid divide-by-zero.
     size = feat.size()

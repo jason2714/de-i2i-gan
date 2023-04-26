@@ -366,6 +366,7 @@ class DefectGanModel(BaseModel):
             return None
         embed_list = []
         num_embeds = random.randint(1, self.opt.num_embeds)
+        # num_embeds = self.opt.num_embeds
         for label in labels:
             tuple_label = tuple(label.int().tolist())
             if not self.embeddings[tuple_label]:

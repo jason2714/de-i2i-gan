@@ -74,9 +74,19 @@ def test():
     dataset_cls = CodeBrimDataset
     opt.clf_loss_type = dataset_cls.clf_loss_type
 
+    # test_transform = transforms.Compose([
+    #     transforms.Resize(opt.image_size),
+    #     transforms.RandomCrop((opt.image_size, opt.image_size), pad_if_needed=True),
+    #     transforms.ToTensor(),
+    #     transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+    # ])
+
     test_transform = transforms.Compose([
         transforms.Resize(opt.image_size),
         transforms.RandomCrop((opt.image_size, opt.image_size), pad_if_needed=True),
+        transforms.RandomHorizontalFlip(0.5),
+        transforms.RandomVerticalFlip(0.5),
+        transforms.ColorJitter(brightness=0.2, saturation=0.2, contrast=0.2),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     ])
