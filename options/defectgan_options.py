@@ -45,8 +45,7 @@ class DefectGanBaseOptions(BaseOptions):
                             help='variance of the initialization distribution')
         parser.add_argument('--cycle_gan', action='store_true', help='Whether to use cycleGAN architecture')
         parser.add_argument('--skip_conn', action='store_true', help='Whether to use skip connection architecture')
-        parser.add_argument('--use_spectral', action='store_true', default=False,
-                            help='whether to use spectral norm in conv block')
+        parser.add_argument('--use_spectral', action='store_true', help='whether to use spectral norm in conv block')
 
         # for inception model
         parser.add_argument('--dims', type=int, default=2048,
@@ -57,6 +56,9 @@ class DefectGanBaseOptions(BaseOptions):
         parser.add_argument('--npz_path', type=str, default=None,
                             help='Paths to .npz statistic files (required if cal_fid is True)')
 
+        # for lpips metrics
+        parser.add_argument('--num_lpips_images', type=int, default=10, help='use # images to calculate LPIPS score')
+
         # for style embeddings
         parser.add_argument('--embed_nc', type=int, default=768, help='# of embedding classes, [768 | 1024]')
         parser.add_argument('--latent_dim', type=int, default=16, help='# of latent dimension')
@@ -64,6 +66,7 @@ class DefectGanBaseOptions(BaseOptions):
         parser.add_argument('--num_embeds', type=int, default=5, help='Number of embeddings to use')
         parser.add_argument('--sean_alpha', type=float, default=None, help='Initial alpha value for SEAN block, '
                                  'if 1 then use embedding only, if 0 then use latent only')
+        parser.add_argument('--style_distill', action='store_true', help='Whether to use style distillation')
 
         return parser
 
@@ -161,7 +164,7 @@ class PreTrainOptions(DefectGanBaseOptions, BaseTrainOptions):
                                  'e.g. [lr] or [lr_d, lr_g]')
         parser.add_argument('--scheduler', type=str, default='cos', help='type of scheduler [step|exp|cos]')
         parser.add_argument('--lr_decay', type=float, default=0.05, help='learning rate decay for optimizer')
-        parser.add_argument('--loss_weight', type=int, nargs='+', default=[5, 3, 2],
+        parser.add_argument('--loss_weight', type=int, nargs='+', default=[10, 3, 1],
                             help='aggregation weight for each loss, [rec, cls_d, cls_g]')
         parser.add_argument('--num_critics', type=int, default=1,
                             help='number of discriminator iterations per generator iterations.')

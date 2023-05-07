@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from models.networks.base_network import BaseNetwork
 from models.networks.architecture import DeConvBlock, ConvBlock, ResBlock, UnetBlock, ResnetSubModule, SEAN, \
     NormConvBlock, NormResBlock
@@ -137,6 +139,7 @@ class DefectGanGenerator(BaseNetwork):
             for i in range(opt.num_res // 2, opt.num_res):
                 dec_res_blk.append(NormResBlock(opt.style_norm_block_type, opt.hidden_nc,
                                                 opt.label_nc, crt_dim, crt_dim,
+                                                style_distill=opt.style_distill,
                                                 embed_nc=opt.embed_nc,
                                                 kernel_size=(3, 3),
                                                 stride=(1, 1),
@@ -175,6 +178,7 @@ class DefectGanGenerator(BaseNetwork):
             for i in range(opt.num_scales):
                 de_conv_blk.append(NormConvBlock(opt.style_norm_block_type, opt.hidden_nc,
                                                  opt.label_nc, crt_dim, crt_dim // 2,
+                                                 style_distill=opt.style_distill,
                                                  embed_nc=opt.embed_nc,
                                                  kernel_size=(3, 3),
                                                  stride=(1, 1),
@@ -280,3 +284,20 @@ class DefectGanGenerator(BaseNetwork):
         for attr_name, attr_value in self.named_modules():
             if isinstance(attr_value, SEAN):
                 attr_value.set_alpha(alpha)
+
+    def enable_sean_distill_loss(self, enable_distill_loss):
+        for attr_name, attr_value in self.named_modules():
+            if isinstance(attr_value, SEAN):
+                attr_value.distill_loss = enable_distill_loss
+
+    def get_sean_distill_loss(self):
+        distill_losses = {'latent': [], 'embed': []}
+        for attr_name, attr_value in self.named_modules():
+            if isinstance(attr_value, SEAN):
+                if attr_value.distill_loss:
+                    for loss_type in distill_losses.keys():
+                        distill_losses[loss_type] += attr_value.distill_loss[loss_type]
+        for loss_type in distill_losses.keys():
+            if distill_losses[loss_type]:
+                distill_losses[loss_type] = torch.stack(distill_losses[loss_type]).mean()
+        return distill_losses

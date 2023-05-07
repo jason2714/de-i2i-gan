@@ -29,6 +29,8 @@ class MAETrainer(BaseTrainer):
         assert len(opt.lr) in (1, 2), f'length of lr must be 1 or 2, not {len(opt.lr)}'
         self.lr = {'D': opt.lr[0],
                    'G': opt.lr[1]} if len(opt.lr) == 2 else opt.lr[0]
+        if opt.style_norm_block_type == 'adain':
+            self.lr['E'] = opt.lr[1]
 
     def _init_losses(self):
         self.losses = {loss_type: defaultdict(list)
@@ -51,12 +53,12 @@ class MAETrainer(BaseTrainer):
                 repaired_grid = self.model('mae_generate_grid', data, labels)
                 writer.add_image(f'Images/{data_type}', repaired_grid, epoch)
 
-            mask_token = self.model.mask_token.mask_token.detach().clone()\
-                .view(self.opt.image_size, self.opt.image_size).cpu()
+            mask_token = self.model.mask_token.mask_token.detach().clone() \
+                .view(1, self.opt.image_size, self.opt.image_size).cpu()
             mask_token = mask_token - mask_token.min()
             mask_token = mask_token / mask_token.max()
-            heatmap = cv2.cvtColor(cv2.applyColorMap(np.uint8(255 * mask_token), cv2.COLORMAP_JET), cv2.COLOR_BGR2RGB)
-            mask_token = torch.from_numpy(heatmap.transpose(2, 0, 1)).float() / 255
+            # heatmap = cv2.cvtColor(cv2.applyColorMap(np.uint8(255 * mask_token), cv2.COLORMAP_JET), cv2.COLOR_BGR2RGB)
+            # mask_token = torch.from_numpy(heatmap.transpose(2, 0, 1)).float() / 255
             writer.add_image(f'Images/mask_token', mask_token, epoch)
 
     def train(self, train_loaders, val_loaders=None):
@@ -97,7 +99,6 @@ class MAETrainer(BaseTrainer):
                              gan_G=f'{sum(self.losses["gan"]["G"]) / (len(self.losses["gan"]["G"]) + 1e-12):.4f}',
                              clf_D=f'{sum(self.losses["clf"]["D"]) / (len(self.losses["clf"]["D"]) + 1e-12):.4f}',
                              clf_G=f'{sum(self.losses["clf"]["G"]) / (len(self.losses["clf"]["G"]) + 1e-12):.4f}')
-
 
     @torch.no_grad()
     def _val_epoch(self, data_loader, epoch):

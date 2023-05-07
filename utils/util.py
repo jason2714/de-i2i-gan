@@ -106,6 +106,18 @@ def calc_embed_mean_std(feat, eps=1e-5):
     return feat_mean, feat_std
 
 
+def calc_kl_with_logits(input_feat, target_feat, temperature=4.):
+    """
+        temperature: float, make the distribution less sharp
+    """
+    kl_mean = F.kl_div(
+        F.log_softmax(input_feat / temperature, dim=1),
+        F.softmax(target_feat / temperature, dim=1),
+        reduction='batchmean'
+    ) * temperature * temperature
+    return kl_mean
+
+
 def visualize_embeddings(embeddings, plt_dir, plt_name, reduction_type='pca'):
     plt_dir.mkdir(parents=True, exist_ok=True)
     plt_path = plt_dir / plt_name

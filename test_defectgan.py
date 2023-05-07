@@ -19,7 +19,7 @@ from torchvision.utils import save_image
 from models.networks.normalization import SEAN, SPADE
 from collections import defaultdict
 from utils.util import visualize_embeddings
-from models.networks.architecture import SEANResBlock
+from models.networks.architecture import NormResBlock
 import os
 from datasets.codebrim_dataset import CodeBrimDataset
 from torchsummary import summary
@@ -32,7 +32,7 @@ layer_res_ratios = defaultdict(list)
 
 def check_residual_ratio(model, data_loader):
     for attr_name, attr_value in model.networks['G'].named_modules():
-        if isinstance(attr_value, SEANResBlock):
+        if isinstance(attr_value, NormResBlock):
             attr_value.register_forward_hook(create_hook(attr_name, hook_type='res'))
     pbar = tqdm(data_loader, colour='MAGENTA')
     # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
@@ -145,7 +145,7 @@ def save_stats(opt, dataset):
 
 @torch.no_grad()
 def main():
-    fix_rand_seed()
+    fix_rand_seed(1)
     # defectgan_options
     opt = TestOptions().parse()
     # dataset_cls = find_dataset_using_name(opt.dataset_name)
@@ -200,7 +200,7 @@ def main():
 
         metrics = calculate_metrics_from_model(opt, model,
                                                test_loaders['background'], test_loaders['defects'],
-                                               metric_models, metrics)
+                                               metric_models, metrics, is_score_type='std')
         for metric_names in opt.metrics:
             print(f'{metric_names}: {metrics[metric_names]} at epoch {opt.which_epoch}')
 
@@ -309,5 +309,5 @@ if __name__ == '__main__':
     python test_defectgan.py --data_dir A:/research/data --batch_size 4 --name org --save_img_grid
     python test_defectgan.py --name mae_shrink_token_2 --data_dir A:/research/data --batch_size 32 --add_noise --use_spectral --npz_path A:\research\data\codebrim\test\defects00.npz
     python test_defectgan.py --data_dir A:/research/data --name org_sean_embed1 --use_spectral --add_noise --batch_size 32 --npz_path A:\research\data\codebrim\test\defects00.npz --num_imgs -1
-    --embed_path A:/research/de-i2i-gan/results/vit_shrink/latest_train_fusion_embeddings.pth --style_norm_block_type sean --sean_alpha 1 
+    --style_norm_block_type sean --sean_alpha 1 --num_embeds 1
     '''

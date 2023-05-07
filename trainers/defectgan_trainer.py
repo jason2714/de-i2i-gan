@@ -26,6 +26,8 @@ class DefectGanTrainer(BaseTrainer):
                              'sd_cyc': opt.loss_weight[3],
                              'sd_con': opt.loss_weight[4]}
         self.loss_types = ['gan', 'clf', 'aux']
+        if opt.style_norm_block_type == 'sean' and opt.style_distill:
+            self.loss_types.append('distill')
         self._init_losses()
         if opt.phase == 'val':
             self.metrics = {'fid': None,
@@ -137,12 +139,23 @@ class DefectGanTrainer(BaseTrainer):
 
     def _train_generator_once(self, bg_data, df_labels, df_data):
         self.optimizers['G'].zero_grad()
-        gan_loss, clf_loss, rec_loss, sd_cyc_loss, sd_con_loss = \
-            self.model('generator', bg_data, df_labels, df_data)
-        g_loss = gan_loss + clf_loss * self.loss_weights['clf_g'] + \
-                 rec_loss * self.loss_weights['rec'] + \
-                 sd_cyc_loss * self.loss_weights['sd_cyc'] + \
-                 sd_con_loss * self.loss_weights['sd_con']
+        if self.opt.style_norm_block_type == 'sean' and self.opt.style_distill:
+            gan_loss, clf_loss, rec_loss, sd_cyc_loss, sd_con_loss, distill_latent_loss, distill_embed_loss = \
+                self.model('generator', bg_data, df_labels, df_data)
+            g_loss = gan_loss + clf_loss * self.loss_weights['clf_g'] + \
+                     rec_loss * self.loss_weights['rec'] + \
+                     sd_cyc_loss * self.loss_weights['sd_cyc'] + \
+                     sd_con_loss * self.loss_weights['sd_con'] + \
+                     distill_latent_loss + distill_embed_loss
+            self.losses['distill']['embed'].append(distill_embed_loss.item())
+            self.losses['distill']['latent'].append(distill_latent_loss.item())
+        else:
+            gan_loss, clf_loss, rec_loss, sd_cyc_loss, sd_con_loss = \
+                self.model('generator', bg_data, df_labels, df_data)
+            g_loss = gan_loss + clf_loss * self.loss_weights['clf_g'] + \
+                     rec_loss * self.loss_weights['rec'] + \
+                     sd_cyc_loss * self.loss_weights['sd_cyc'] + \
+                     sd_con_loss * self.loss_weights['sd_con']
         # self.scaler.scale(g_loss).backward()
         # self.scaler.step(self.optimizers['G'])
         # self.scaler.update()

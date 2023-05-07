@@ -2,7 +2,8 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import math
-from utils.util import calc_mean_std
+from utils.util import calc_mean_std, calc_embed_mean_std, calc_kl_with_logits
+from collections import defaultdict
 
 
 class SPADE(nn.Module):
@@ -52,7 +53,8 @@ class AdaIN(nn.Module):
 
     def forward(self, x, style_feat):
         N, C = x.size()[:2]
-        assert style_feat.size(1) == C, 'The channel of style feature is not equal to input feature.'
+        assert style_feat.size(1) == self.hidden_nc, 'The channel of style feature is not equal to hidden_nc.'
+        style_feat = style_feat.view(N, self.hidden_nc)
 
         normalized = self.param_free_norm(x)
 
@@ -72,9 +74,12 @@ class AdaIN(nn.Module):
 
 class SEAN(nn.Module):
     def __init__(self, embed_nc, norm_nc, label_nc, hidden_nc=128,
-                 latent_dim=16, norm_layer=nn.BatchNorm2d):
+                 latent_dim=16, norm_layer=nn.BatchNorm2d, style_distill=False):
         super().__init__()
 
+        self.style_distill = style_distill
+        if self.style_distill:
+            self._distill_loss = None
         self.latent_dim = latent_dim
         self.noise_dim = self.latent_dim - label_nc
         self.alpha = 1.
@@ -87,7 +92,7 @@ class SEAN(nn.Module):
 
         self.mlp_latent = nn.Sequential(nn.Linear(self.latent_dim, hidden_nc),
                                         nn.ReLU(inplace=True))
-        # self.mlp_latent = nn.Sequential(nn.Linear(label_nc + self.latent_dim, hidden_nc // 2),
+        # self.mlp_latent = nn.Sequential(nn.Linear(self.latent_dim, hidden_nc // 2),
         #                                 nn.ReLU(inplace=True),
         #                                 nn.Linear(hidden_nc // 2, hidden_nc),
         #                                 nn.ReLU(inplace=True))
@@ -99,6 +104,21 @@ class SEAN(nn.Module):
         #                                 nn.ReLU(inplace=True),
         #                                 nn.Linear(hidden_nc // 2, hidden_nc),
         #                                 nn.ReLU(inplace=True))
+
+    @property
+    def distill_loss(self):
+        return self._distill_loss
+
+    @distill_loss.setter
+    def distill_loss(self, enable_distill_loss):
+        """
+            set the distillation loss to None to disable distillation
+            set the distillation loss to the empty dict to enable distillation
+        """
+        if enable_distill_loss:
+            self._distill_loss = defaultdict(list)
+        else:
+            self._distill_loss = None
 
     def set_alpha(self, alpha):
         self.alpha = alpha
@@ -130,6 +150,10 @@ class SEAN(nn.Module):
             mask_indices = (feat == 0).all(dim=1).view(-1, 1)
             mix_feat = mix_feat * ~mask_indices + latent_code * mask_indices
 
+            if self.style_distill and self._distill_loss is not None:
+                self._distill_loss['latent'].append(calc_kl_with_logits(latent_code, mix_feat))
+                self._distill_loss['embed'].append(calc_kl_with_logits(enc_feat, mix_feat))
+
         gamma = self.mlp_gamma(mix_feat).view(N, C, 1, 1)
         beta = self.mlp_beta(mix_feat).view(N, C, 1, 1)
 
@@ -137,6 +161,58 @@ class SEAN(nn.Module):
         out = normalized * (1 + gamma) + beta
 
         return out
+
+# class SEAN(nn.Module):
+#     def __init__(self, embed_nc, norm_nc, label_nc, hidden_nc=128,
+#                  latent_dim=16, norm_layer=nn.BatchNorm2d):
+#         super().__init__()
+#
+#         self.latent_dim = latent_dim
+#         self.noise_dim = self.latent_dim - label_nc
+#         self.alpha = 1.
+#         self.param_free_norm = norm_layer(norm_nc, affine=False)
+#         # The dimension of the intermediate embedding space. Yes, hardcoded.
+#
+#         self.mlp_shared = nn.Sequential(nn.Linear(embed_nc, norm_nc), nn.ReLU(inplace=True))
+#
+#         self.mlp_latent = nn.Sequential(nn.Linear(self.latent_dim, norm_nc),
+#                                         nn.ReLU(inplace=True))
+#         self.eps = 1e-5
+#
+#     def set_alpha(self, alpha):
+#         self.alpha = alpha
+#
+#     def forward(self, x, labels, feat=None):
+#         N, C = x.size()[:2]
+#         num_embed = feat.size(1)
+#         # Part 1. generate parameter-free normalized activations
+#         normalized = self.param_free_norm(x)
+#
+#         # use noise and labels to produce latent code
+#         noise = torch.randn(N, num_embed, self.noise_dim).to(x.device)
+#         labels = labels.view(N, 1, -1).expand(-1, num_embed, -1)
+#         latent = torch.cat([noise, labels], dim=2)
+#         latent_code = self.mlp_latent(latent)
+#         # latent_code = self.mlp_latent(labels)
+#
+#         # Part 2. produce scaling and bias conditioned on semantic map
+#         if feat is None:
+#             mix_feat = latent_code
+#         else:
+#             enc_feat = self.mlp_shared(feat)
+#             mix_feat = enc_feat * self.alpha + latent_code * (1 - self.alpha)
+#
+#             # replace style embed with latent code if style embed is all zeros
+#             mask_indices = (feat == 0).all(dim=2).view(N, num_embed, 1)
+#             mix_feat = mix_feat * ~mask_indices + latent_code * mask_indices
+#
+#         beta, gamma = calc_embed_mean_std(mix_feat, eps=self.eps)
+#
+#         # apply scale and bias
+#         out = normalized * (1 + gamma) + beta
+#
+#         return out
+
 
 # class MSEAN(nn.Module):
 #     def __init__(self, embed_nc, norm_nc, label_nc,
@@ -158,13 +234,8 @@ class SEAN(nn.Module):
 #                                         nn.ReLU(inplace=True))
 #         self.eps = 1e-5
 #
-#     def update_alpha(self, epoch, num_epochs):
-#         """
-#         Update alpha for mixing latent code and semantic map
-#         Must be called after each epoch
-#         """
-#         if not self.use_embed_only:
-#             self.alpha = (1 + math.cos(math.pi * epoch / num_epochs)) / 2
+#     def set_alpha(self, alpha):
+#         self.alpha = alpha
 #
 #     def forward(self, x, labels, feats=None):
 #         # Part 1. generate parameter-free normalized activations
