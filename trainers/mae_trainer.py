@@ -17,6 +17,8 @@ class MAETrainer(BaseTrainer):
                              'clf_D': opt.loss_weight[1],
                              'clf_G': opt.loss_weight[2]}
         self.loss_types = ['rec', 'gan', 'clf']
+        if opt.style_norm_block_type == 'sean' and opt.style_distill:
+            self.loss_types.append('distill')
         self._init_losses()
 
         # initial attributes for dataset
@@ -54,7 +56,7 @@ class MAETrainer(BaseTrainer):
                 writer.add_image(f'Images/{data_type}', repaired_grid, epoch)
 
             mask_token = self.model.mask_token.mask_token.detach().clone() \
-                .view(1, self.opt.image_size, self.opt.image_size).cpu()
+                .view(self.model.mask_token.mask_token.size(1), self.opt.image_size, self.opt.image_size).cpu()
             mask_token = mask_token - mask_token.min()
             mask_token = mask_token / mask_token.max()
             # heatmap = cv2.cvtColor(cv2.applyColorMap(np.uint8(255 * mask_token), cv2.COLORMAP_JET), cv2.COLOR_BGR2RGB)
@@ -116,13 +118,39 @@ class MAETrainer(BaseTrainer):
 
     def _train_generator_once(self, data, labels):
         self.optimizers['G'].zero_grad()
-        rec_loss, gan_loss, clf_loss = self.model('mae_generator', data, labels)
-        g_loss = gan_loss + rec_loss * self.loss_weights['rec'] + clf_loss * self.loss_weights['clf_G']
-        self.scaler.scale(g_loss).backward()
-        self.scaler.step(self.optimizers['G'])
-        self.scaler.update()
-        # g_loss.backward()
-        # self.optimizers['G'].step()
+        if self.opt.style_norm_block_type == 'adain':
+            self.optimizers['E'].zero_grad()
+        if self.opt.style_norm_block_type == 'sean' and self.opt.style_distill:
+            rec_loss, gan_loss, clf_loss, distill_latent_loss, distill_embed_loss = \
+                self.model('mae_generator', data, labels)
+            g_loss = gan_loss + rec_loss * self.loss_weights['rec'] + clf_loss * self.loss_weights['clf_G']
+            # g_loss += distill_latent_loss + distill_embed_loss
+            self.losses['distill']['embed'].append(distill_embed_loss.item())
+            self.losses['distill']['latent'].append(distill_latent_loss.item())
+        else:
+            rec_loss, gan_loss, clf_loss = self.model('mae_generator', data, labels)
+            g_loss = gan_loss + rec_loss * self.loss_weights['rec'] + clf_loss * self.loss_weights['clf_G']
+        # self.scaler.scale(g_loss).backward()
+        # self.scaler.step(self.optimizers['G'])
+        # if self.opt.style_norm_block_type == 'adain':
+        #     self.scaler.step(self.optimizers['E'])
+        # self.scaler.update()
+        # for name, param in self.model.networks['G'].named_parameters():
+        #     if param.grad is not None:
+        #         print(name, param.grad.sum())
+        #     else:
+        #         print(name, param.grad)
+        g_loss.backward()
+        # print('-' * 100)
+        # for name, param in self.model.networks['G'].named_parameters():
+        #     print(name, param.sum())
+        # print('-' * 100)
+        self.optimizers['G'].step()
+        # for name, param in self.model.networks['G'].named_parameters():
+        #     print(name, param.sum())
+        # exit()
+        if self.opt.style_norm_block_type == 'adain':
+            self.optimizers['E'].step()
         self.losses['rec']['train'].append(rec_loss.item())
         self.losses['gan']['G'].append(gan_loss.item())
         self.losses['clf']['G'].append(clf_loss.item())
@@ -131,10 +159,10 @@ class MAETrainer(BaseTrainer):
         self.optimizers['D'].zero_grad()
         gan_loss, clf_loss = self.model('mae_discriminator', data, labels)
         d_loss = gan_loss + clf_loss * self.loss_weights['clf_D']
-        self.scaler.scale(d_loss).backward()
-        self.scaler.step(self.optimizers['D'])
-        self.scaler.update()
-        # d_loss.backward()
-        # self.optimizers['D'].step()
+        # self.scaler.scale(d_loss).backward()
+        # self.scaler.step(self.optimizers['D'])
+        # self.scaler.update()
+        d_loss.backward()
+        self.optimizers['D'].step()
         self.losses['gan']['D'].append(gan_loss.item())
         self.losses['clf']['D'].append(clf_loss.item())

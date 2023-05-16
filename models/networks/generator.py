@@ -277,8 +277,11 @@ class DefectGanGenerator(BaseNetwork):
     def update_per_epoch(self, epoch):
         super(DefectGanGenerator, self).update_per_epoch(epoch)
         alpha = (1 + math.cos(math.pi * epoch / self.opt.num_epochs)) / 2
-        if self.opt.style_norm_block_type == 'sean' and self.opt.sean_alpha is None:
-            self.set_sean_alpha(alpha)
+        if self.opt.style_norm_block_type == 'sean':
+            if self.opt.sean_alpha is None:
+                self.set_sean_alpha(alpha)
+            if self.opt.use_running_stats:
+                self.update_stats()
 
     def set_sean_alpha(self, alpha):
         for attr_name, attr_value in self.named_modules():
@@ -301,3 +304,32 @@ class DefectGanGenerator(BaseNetwork):
             if distill_losses[loss_type]:
                 distill_losses[loss_type] = torch.stack(distill_losses[loss_type]).mean()
         return distill_losses
+
+    def update_stats(self):
+        for attr_name, attr_value in self.named_modules():
+            if isinstance(attr_value, SEAN):
+                attr_value.update_stats()
+
+    @property
+    def track_running_stats(self):
+        for attr_name, attr_value in self.named_modules():
+            if isinstance(attr_value, SEAN):
+                return attr_value.track_running_stats
+
+    @track_running_stats.setter
+    def track_running_stats(self, track_running_stats):
+        for attr_name, attr_value in self.named_modules():
+            if isinstance(attr_value, SEAN):
+                attr_value.track_running_stats = track_running_stats
+
+    @property
+    def inference_running_stats(self):
+        for attr_name, attr_value in self.named_modules():
+            if isinstance(attr_value, SEAN):
+                return attr_value.inference_running_stats
+
+    @inference_running_stats.setter
+    def inference_running_stats(self, inference_running_stats):
+        for attr_name, attr_value in self.named_modules():
+            if isinstance(attr_value, SEAN):
+                attr_value.inference_running_stats = inference_running_stats

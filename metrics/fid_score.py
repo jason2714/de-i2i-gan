@@ -257,16 +257,17 @@ def compute_statistics_of_path(path, model, batch_size, dims, device,
 
 
 def calculate_fid_from_model(opt, model, inception_model, data_loader, label_loader,
-                             input_stat, description='Testing... '):
+                             input_stat, description=None):
     pred_arr = None
     if isinstance(label_loader, tuple):
         num_batches = opt.num_imgs // opt.batch_size
         labels = torch.FloatTensor(label_loader).view(1, -1).repeat(opt.batch_size, 1)
         label_loader = [(_, labels[:], _) for _ in range(num_batches)]
-    pbar = tqdm(label_loader, colour='MAGENTA')
-    # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
-    for _, df_labels, _ in pbar:
-        pbar.set_description(description)
+    # pbar = tqdm(label_loader, colour='MAGENTA')
+    # # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
+    # for _, df_labels, _ in pbar:
+    #     pbar.set_description(description)
+    for _, df_labels, _ in label_loader:
         bg_data, bg_labels, _ = next(data_loader)
         bg_data, bg_labels = bg_data[:df_labels.size(0)], bg_labels[:df_labels.size(0)]
         fake_imgs, _ = model('inference', bg_data, df_labels)

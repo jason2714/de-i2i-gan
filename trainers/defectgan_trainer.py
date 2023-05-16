@@ -70,8 +70,6 @@ class DefectGanTrainer(BaseTrainer):
             df_grid = self.model('generate_grid', bg_data, labels)
             mtp_df_grid = self.model('generate_grid', bg_data, df_labels, img_only=True)
             writer.add_image('Images/Single Defect', df_grid, epoch)
-            # writer.add_image('Images/Single Normal', nm_grid, epoch)
-            # writer.add_image('Images/Single Defect Distribution', df_prob_grid, epoch)
             writer.add_image('Images/Multiple Defects', mtp_df_grid, epoch)
 
     def train(self, train_loaders, val_loaders=None):
@@ -139,28 +137,28 @@ class DefectGanTrainer(BaseTrainer):
 
     def _train_generator_once(self, bg_data, df_labels, df_data):
         self.optimizers['G'].zero_grad()
+        if self.opt.style_norm_block_type == 'adain':
+            self.optimizers['E'].zero_grad()
         if self.opt.style_norm_block_type == 'sean' and self.opt.style_distill:
             gan_loss, clf_loss, rec_loss, sd_cyc_loss, sd_con_loss, distill_latent_loss, distill_embed_loss = \
                 self.model('generator', bg_data, df_labels, df_data)
-            g_loss = gan_loss + clf_loss * self.loss_weights['clf_g'] + \
-                     rec_loss * self.loss_weights['rec'] + \
-                     sd_cyc_loss * self.loss_weights['sd_cyc'] + \
-                     sd_con_loss * self.loss_weights['sd_con'] + \
-                     distill_latent_loss + distill_embed_loss
             self.losses['distill']['embed'].append(distill_embed_loss.item())
             self.losses['distill']['latent'].append(distill_latent_loss.item())
         else:
             gan_loss, clf_loss, rec_loss, sd_cyc_loss, sd_con_loss = \
                 self.model('generator', bg_data, df_labels, df_data)
-            g_loss = gan_loss + clf_loss * self.loss_weights['clf_g'] + \
-                     rec_loss * self.loss_weights['rec'] + \
-                     sd_cyc_loss * self.loss_weights['sd_cyc'] + \
-                     sd_con_loss * self.loss_weights['sd_con']
+        g_loss = gan_loss + \
+                 clf_loss * self.loss_weights['clf_g'] + \
+                 rec_loss * self.loss_weights['rec'] + \
+                 sd_cyc_loss * self.loss_weights['sd_cyc'] + \
+                 sd_con_loss * self.loss_weights['sd_con']
         # self.scaler.scale(g_loss).backward()
         # self.scaler.step(self.optimizers['G'])
         # self.scaler.update()
         g_loss.backward()
         self.optimizers['G'].step()
+        if self.opt.style_norm_block_type == 'adain':
+            self.optimizers['E'].step()
         self.losses['gan']['G'].append(gan_loss.item())
         self.losses['clf']['G'].append(clf_loss.item())
         self.losses['aux']['rec'].append(rec_loss.item())

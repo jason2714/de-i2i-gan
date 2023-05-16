@@ -54,7 +54,9 @@ class DefectGanBaseOptions(BaseOptions):
                                   'By default, uses pool3 features'))
         parser.add_argument('--num_imgs', type=int, default=5_000, help='use # images to calculate FID score')
         parser.add_argument('--npz_path', type=str, default=None,
-                            help='Paths to .npz statistic files (required if cal_fid is True)')
+                            help='Paths to .npz statistic files, for calculating FID score')
+        parser.add_argument('--npy_path', type=str, default=None,
+                            help='Paths to .npy statistic files, for calculating mFID score')
 
         # for lpips metrics
         parser.add_argument('--num_lpips_images', type=int, default=10, help='use # images to calculate LPIPS score')
@@ -67,6 +69,7 @@ class DefectGanBaseOptions(BaseOptions):
         parser.add_argument('--sean_alpha', type=float, default=None, help='Initial alpha value for SEAN block, '
                                  'if 1 then use embedding only, if 0 then use latent only')
         parser.add_argument('--style_distill', action='store_true', help='Whether to use style distillation')
+        parser.add_argument('--use_running_stats', action='store_true', help='Whether to use running stats in SEAN')
 
         return parser
 

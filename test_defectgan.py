@@ -189,7 +189,7 @@ def main():
     if opt.metrics is not None:
         metrics = {metric: None for metric in opt.metrics}
         metric_models = dict()
-        if 'fid' or 'is' in opt.metrics:
+        if 'fid' in opt.metrics or 'is' in opt.metrics or 'mfid' in opt.metrics:
             block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[opt.dims]
             metric_models['inception'] = InceptionV3([block_idx]).to(opt.device, non_blocking=True)
             # must use model.eval() to ignore dropout and batchNorm, otherwise the value will break
@@ -198,35 +198,12 @@ def main():
             metric_models['lpips'] = LearnedPerceptualImagePatchSimilarity(weights='DEFAULT').to(device=opt.device)
             metric_models['lpips'].eval()
 
+        model.networks['G'].inference_running_stats = opt.use_running_stats
         metrics = calculate_metrics_from_model(opt, model,
                                                test_loaders['background'], test_loaders['defects'],
                                                metric_models, metrics, is_score_type='std')
         for metric_names in opt.metrics:
             print(f'{metric_names}: {metrics[metric_names]} at epoch {opt.which_epoch}')
-
-    if opt.cal_mfid:
-
-        # load stats for each class from npz file
-        assert opt.npz_path is not None, 'npz_path should not be None if cal_mfid is True'
-        class_stats = np.load(opt.npz_path, allow_pickle=True).item()
-
-        # load inception model
-        block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[opt.dims]
-        inception_model = InceptionV3([block_idx]).to(opt.device, non_blocking=True)
-        # must use model.eval() to ignore dropout and batchNorm, otherwise the value will break
-        inception_model.eval()
-
-        class_fids = []
-        for class_idx in range(1, opt.label_nc):
-            label = [0] * opt.label_nc
-            label[class_idx] = 1
-            label = tuple(label)
-            fid_value = calculate_fid_from_model(opt, model, inception_model,
-                                                 test_loaders['background'], label,
-                                                 class_stats[label], 'Testing... ')
-            class_fids.append(fid_value)
-        print('FID for each class:', class_fids)
-        print(f'mFID: {sum(class_fids) / len(class_fids)} at epoch {opt.which_epoch}')
 
     if opt.save_img_grid:
         import json

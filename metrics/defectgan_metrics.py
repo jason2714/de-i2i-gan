@@ -2,14 +2,18 @@ from torch.nn.functional import adaptive_avg_pool2d
 from tqdm import tqdm
 import numpy as np
 import torch
-from metrics.fid_score import calculate_fid
+from metrics.fid_score import calculate_fid, calculate_fid_from_model
 from itertools import combinations
 
 
 @torch.no_grad()
 def calculate_metrics_from_model(opt, model, bg_loader, df_loader, metric_models, metrics, is_score_type='min_max'):
-    calculate_fid_and_is_from_model(opt, model, bg_loader, df_loader, metric_models, metrics, is_score_type)
-    calculate_lpips_from_model(opt, model, bg_loader, df_loader, metric_models, metrics)
+    if 'fid' in opt.metrics:
+        calculate_fid_and_is_from_model(opt, model, bg_loader, df_loader, metric_models, metrics, is_score_type)
+    if 'lpips' in opt.metrics:
+        calculate_lpips_from_model(opt, model, bg_loader, df_loader, metric_models, metrics)
+    if 'mfid' in opt.metrics:
+        calculate_mfid_from_model(opt, model, bg_loader, df_loader, metric_models, metrics)
     return metrics
 
 
@@ -94,4 +98,26 @@ def calculate_fid_and_is_from_model(opt, model, bg_loader, df_loader, metric_mod
         elif is_score_type == 'std':
             metrics['is'] = {'mean': mu,
                              'std': sigma}
+    return metrics
+
+
+def calculate_mfid_from_model(opt, model, bg_loader, df_loader, metric_models, metrics):
+    # load stats for each class from npz file
+    assert opt.npy_path is not None, 'npy_path should not be None'
+    class_stats = np.load(opt.npy_path, allow_pickle=True).item()
+
+    class_fids = []
+    pbar = tqdm(range(1, opt.label_nc), colour='MAGENTA')
+    # BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE
+    for class_idx in pbar:
+        pbar.set_description('Calculating metrics of mFID...')
+        label = [0] * opt.label_nc
+        label[class_idx] = 1
+        label = tuple(label)
+        fid_value = calculate_fid_from_model(opt, model, metric_models['inception'],
+                                             bg_loader, label,
+                                             class_stats[label])
+        class_fids.append(fid_value)
+    print('FID for each class:', class_fids)
+    metrics['mfid'] = sum(class_fids) / len(class_fids)
     return metrics

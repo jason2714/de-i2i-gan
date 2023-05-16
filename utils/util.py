@@ -106,14 +106,15 @@ def calc_embed_mean_std(feat, eps=1e-5):
     return feat_mean, feat_std
 
 
-def calc_kl_with_logits(input_feat, target_feat, temperature=4.):
+def calc_kl_with_logits(p, q, temperature=4.):
     """
         temperature: float, make the distribution less sharp
+        input type of q and q should be in log scale
     """
     kl_mean = F.kl_div(
-        F.log_softmax(input_feat / temperature, dim=1),
-        F.softmax(target_feat / temperature, dim=1),
-        reduction='batchmean'
+        F.log_softmax(q / temperature, dim=1),
+        F.log_softmax(p / temperature, dim=1),
+        reduction='batchmean', log_target=True
     ) * temperature * temperature
     return kl_mean
 
@@ -177,3 +178,9 @@ def calc_embeddings_mean_variance(embeddings):
 def label_to_str(label):
     label_str = [str(idx) for idx, label_value in enumerate(label) if label_value == 1]
     return '-'.join(label_str)
+
+
+def generate_multilabel_combinations(label_dim):
+    binary_values = torch.tensor([0, 1])
+    all_combinations = torch.cartesian_prod(*([binary_values] * label_dim))
+    return all_combinations
