@@ -373,7 +373,7 @@ class DefectGanModel(BaseModel):
 
         return predicted_imgs, masks
 
-    def _expand_seg(self, labels):
+    def _expand_seg(self, labels) :
         if len(labels.size()) == 2:
             seg = labels.reshape(labels.size(0), labels.size(1), 1, 1)
         elif len(labels.size()) == 4:

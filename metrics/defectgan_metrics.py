@@ -8,11 +8,11 @@ from itertools import combinations
 
 @torch.no_grad()
 def calculate_metrics_from_model(opt, model, bg_loader, df_loader, metric_models, metrics, is_score_type='min_max'):
-    if 'fid' in opt.metrics:
+    if 'fid' in metrics:
         calculate_fid_and_is_from_model(opt, model, bg_loader, df_loader, metric_models, metrics, is_score_type)
-    if 'lpips' in opt.metrics:
+    if 'lpips' in metrics:
         calculate_lpips_from_model(opt, model, bg_loader, df_loader, metric_models, metrics)
-    if 'mfid' in opt.metrics:
+    if 'mfid' in metrics:
         calculate_mfid_from_model(opt, model, bg_loader, df_loader, metric_models, metrics)
     return metrics
 
