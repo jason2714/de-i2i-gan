@@ -317,6 +317,5 @@ if __name__ == '__main__':
     '''
     python test_defectgan.py --data_dir A:/research/data --batch_size 4 --name org --save_img_grid
     python test_defectgan.py --name mae_shrink_token_2 --data_dir A:/research/data --batch_size 32 --add_noise --use_spectral --npz_path A:\research\data\codebrim\test\defects00.npz
-    python test_defectgan.py --data_dir A:/research/data --name org_sean_embed1 --use_spectral --add_noise --batch_size 32 --npz_path A:\research\data\codebrim\test\defects00.npz --num_imgs -1
-    --style_norm_block_type sean --sean_alpha 1 --num_embeds 1
+    python test_defectgan.py --data_dir A:/research/data --name org_mae_shrink_vit_rand_nf --use_spectral --add_noise --batch_size 32 --npz_path A:\research\data\codebrim\test\defects00.npz --num_imgs -1 --style_norm_block_type sean --sean_alpha 1 --use_running_stats --metrics fid lpips 
     '''
