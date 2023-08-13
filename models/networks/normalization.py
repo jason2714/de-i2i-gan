@@ -93,22 +93,10 @@ class SEAN(nn.Module):
         self.mlp_gamma = nn.Linear(hidden_nc, norm_nc)
         self.mlp_beta = nn.Linear(hidden_nc, norm_nc)
 
-        self.mlp_latent = nn.Sequential(nn.Linear(self.latent_dim, hidden_nc),
+        # self.mlp_latent = nn.Sequential(nn.Linear(self.latent_dim, hidden_nc),
+        #                                 nn.ReLU(inplace=True))
+        self.mlp_latent = nn.Sequential(nn.Linear(self.label_nc, hidden_nc),
                                         nn.ReLU(inplace=True))
-        # self.mlp_latent = nn.Sequential(nn.Linear(self.latent_dim, hidden_nc // 4),
-        #                                 nn.ReLU(inplace=True),
-        #                                 nn.Linear(hidden_nc // 4, hidden_nc // 2),
-        #                                 nn.ReLU(inplace=True),
-        #                                 nn.Linear(hidden_nc // 2, hidden_nc),
-        #                                 nn.ReLU(inplace=True))
-        # self.mlp_latent = nn.Sequential(nn.Linear(self.latent_dim, hidden_nc // 2),
-        #                                 nn.ReLU(inplace=True),
-        #                                 nn.Linear(hidden_nc // 2, hidden_nc),
-        #                                 nn.ReLU(inplace=True),
-        #                                 nn.Linear(hidden_nc, hidden_nc),
-        #                                 nn.ReLU(inplace=True),
-        #                                 nn.Linear(hidden_nc, hidden_nc),
-        #                                 nn.ReLU(inplace=True))
         # self.means = nn.ParameterDict()
         self.create_stats()
         self.inference_running_stats = False
@@ -131,9 +119,9 @@ class SEAN(nn.Module):
                 feat = torch.stack(self.embeds[l], dim=0)
                 _, C = feat.size()
                 feat_var = feat.var(dim=0) + eps
-                feat_std = feat_var.sqrt()
-                feat_mean = feat.mean(dim=0)
-                mean[:], std[:] = feat_mean, feat_std
+                new_std = feat_var.sqrt()
+                new_mean = feat.mean(dim=0)
+                mean[:], std[:] = new_std, new_mean
                 self.embeds[l] = self.embeds[l][-self.num_embeds_tracked:]
 
     @property
@@ -159,13 +147,12 @@ class SEAN(nn.Module):
         # Part 1. generate parameter-free normalized activations
         normalized = self.param_free_norm(x)
 
-        # use noise and labels to produce latent code
-        noise = torch.randn(N, self.noise_dim).to(x.device)
         if labels.dim() == 4:
             labels = labels.view(N, -1)
-        latent = torch.cat([noise, labels], dim=1)
-        latent_code = self.mlp_latent(latent)
-        # latent_code = self.mlp_latent(labels)
+        latent_code = self.mlp_latent(labels)
+        # noise = torch.randn(N, self.noise_dim).to(x.device)
+        # noise_labels = torch.cat([labels, noise], dim=1)
+        # latent_code = self.mlp_latent(noise_labels)
 
         # Part 2. produce scaling and bias conditioned on semantic map
         if feat is None:
@@ -176,24 +163,24 @@ class SEAN(nn.Module):
                 tuple_label = tuple(map(lambda x: int(x.item()), label))
                 mean = getattr(self, 'mean_' + label_to_str(tuple_label))
                 std = getattr(self, 'std_' + label_to_str(tuple_label))
-                mix_feat[i] = noise_vector * std * 1 + mean
+                mix_feat[i] = noise_vector * std * 1.5 + mean
         else:
             enc_feat = self.mlp_shared(feat)
+            mix_feat = enc_feat + latent_code.view(latent_code .size(0), 1, -1)
+            # mix_feat = enc_feat
+            if mix_feat.dim() == 3:
+                mix_feat = mix_feat.mean(dim=1)
             if self.track_running_stats:
-                for i, (label, single_feat) in enumerate(zip(labels, enc_feat.clone().detach())):
+                for i, (label, single_feat) in enumerate(zip(labels, mix_feat.clone().detach())):
                     tuple_label = tuple(map(lambda x: int(x.item()), label))
-                    if enc_feat.dim() == 3:
+                    if mix_feat.dim() == 3:
                         for slice_feat in single_feat:
                             self.embeds[tuple_label].append(slice_feat)
                     else:
                         self.embeds[tuple_label].append(single_feat)
-            if enc_feat.dim() == 3:
-                enc_feat = enc_feat.mean(dim=1)
-            mix_feat = enc_feat * self.alpha + latent_code * (1 - self.alpha)
-            # mix_feat = enc_feat
 
             # replace style embed with latent code if style embed is all zeros
-            mask_indices = (enc_feat == 0).all(dim=1).view(-1, 1)
+            mask_indices = (mix_feat == 0).all(dim=1).view(-1, 1)
             mix_feat = mix_feat * ~mask_indices + latent_code * mask_indices
 
             if self.style_distill and self._distill_loss is not None:

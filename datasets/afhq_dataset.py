@@ -28,7 +28,7 @@ class AFHQDataset(Dataset):
 
     def __getitem__(self, index):
         image_fn, label = self.data[index]
-        image = Image.open(image_fn)
+        image = Image.open(image_fn).convert('RGB')
         if self.transform is not None:
             image = self.transform(image)
         return image, torch.FloatTensor(label), str(image_fn)

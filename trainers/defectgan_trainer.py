@@ -154,6 +154,8 @@ class DefectGanTrainer(BaseTrainer):
                  sd_con_loss * self.loss_weights['sd_con']
         # self.scaler.scale(g_loss).backward()
         # self.scaler.step(self.optimizers['G'])
+        # if self.opt.style_norm_block_type == 'adain':
+        #     self.scaler.step(self.optimizers['E'])
         # self.scaler.update()
         g_loss.backward()
         self.optimizers['G'].step()
@@ -180,7 +182,7 @@ class DefectGanTrainer(BaseTrainer):
     def _update_per_epoch(self, epoch=None):
         super()._update_per_epoch(epoch)
         self.model.update_per_epoch(epoch)
-        if sum(self.losses['aux']['con']) / len(self.losses['aux']['con']) < 1e-5:
-            self.loss_weights['sd_con'] = max(self.loss_weights['sd_con'] / 2, 1)
-        elif sum(self.losses['aux']['con']) / len(self.losses['aux']['con']) >= 0.3:
-            self.loss_weights['sd_con'] *= 2
+        # if sum(self.losses['aux']['con']) / len(self.losses['aux']['con']) < 1e-5:
+        #     self.loss_weights['sd_con'] = max(self.loss_weights['sd_con'] / 2, 1)
+        # elif sum(self.losses['aux']['con']) / len(self.losses['aux']['con']) >= 0.3:
+        #     self.loss_weights['sd_con'] *= 2

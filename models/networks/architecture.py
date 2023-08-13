@@ -392,16 +392,30 @@ class NoiseInjection(nn.Module):
 class MaskToken(torch.nn.Module):
     def __init__(self, opt):
         super().__init__()
-        # self.mask_token = torch.nn.Parameter(torch.empty(1, opt.input_nc, opt.image_size, opt.image_size)
-        #                                      .normal_(mean=0, std=opt.init_variance))
-        # self.mask_token = torch.nn.Parameter(torch.empty(1, 1, opt.image_size, opt.image_size)
-        #                                      .normal_(mean=0, std=opt.init_variance))
-        self.mask_token = torch.nn.Parameter(torch.zeros(1, 1, opt.image_size, opt.image_size))
-        # self.mask_token = torch.nn.Parameter(torch.empty(1, 1, 1, 1).normal_(mean=0, std=opt.init_variance))
+        self.mask_token_type = opt.mask_token_type
+        self.mask_ratio = opt.mask_ratio
+        if self.mask_token_type in ('zero', 'mean'):
+            self.mask_token = 0
+        elif self.mask_token_type == 'scalar':
+            self.mask_token = torch.nn.Parameter(torch.zeros(1, 1, 1, 1))
+        elif self.mask_token_type == 'vector':
+            self.mask_token = torch.nn.Parameter(torch.zeros(1, opt.input_nc, 1, 1))
+        elif self.mask_token_type == 'position':
+            self.mask_token = torch.nn.Parameter(torch.zeros(1, 1, opt.image_size, opt.image_size))
+        elif self.mask_token_type == 'full':
+            self.mask_token = torch.nn.Parameter(torch.zeros(1, opt.input_nc, opt.image_size, opt.image_size))
+        else:
+            raise ValueError('Unknown mask token type: {}'.format(self.mask_token_type))
 
-    def forward(self, x, masks):
-        return x + self.mask_token * (1 - masks)
+    def forward(self, imgs, masks):
+        masked_imgs = imgs * masks
+        if self.mask_token_type == 'mean':
+            self._calc_mean_mask_token(masked_imgs)
+        return masked_imgs + self.mask_token * (1 - masks)
 
+    def _calc_mean_mask_token(self, masked_imgs):
+        img_mean = masked_imgs.mean(dim=(2, 3)) / self.mask_ratio
+        self.mask_token = img_mean.reshape(*img_mean.size()[:2], 1, 1)
 
 class EmbedEncoder(torch.nn.Module):
     def __init__(self, embed_nc, hidden_nc):

@@ -1,0 +1,12 @@
+python train_mae.py --name mae_shrink_zero --load_from_opt_file ckpt\mae_shrink_token_zero\opt.pkl --mask_token_type zero --save_ckpt_freq 100
+python train_mae.py --name mae_shrink_mean --load_from_opt_file ckpt\mae_shrink_token_zero\opt.pkl --mask_token_type mean --save_ckpt_freq 100
+python train_mae.py --name mae_shrink_scalar --load_from_opt_file ckpt\mae_shrink_token_zero\opt.pkl --mask_token_type scalar --save_ckpt_freq 100
+python train_mae.py --name mae_shrink_vector --load_from_opt_file ckpt\mae_shrink_token_zero\opt.pkl --mask_token_type vector --save_ckpt_freq 100
+python train_mae.py --name mae_shrink_position --load_from_opt_file ckpt\mae_shrink_token_zero\opt.pkl --mask_token_type position --save_ckpt_freq 100
+python train_mae.py --name mae_shrink_full --load_from_opt_file ckpt\mae_shrink_token_zero\opt.pkl --mask_token_type full --save_ckpt_freq 100
+python train_defectgan.py --name org_mae_shrink_zero --load_from_opt_file ckpt\org_mae_shrink_token_zero\opt.pkl --load_model_name mae_shrink_zero --save_ckpt_freq 30
+python train_defectgan.py --name org_mae_shrink_mean --load_from_opt_file ckpt\org_mae_shrink_token_zero\opt.pkl --load_model_name mae_shrink_mean --save_ckpt_freq 30
+python train_defectgan.py --name org_mae_shrink_scalar --load_from_opt_file ckpt\org_mae_shrink_token_zero\opt.pkl --load_model_name mae_shrink_scalar --save_ckpt_freq 30
+python train_defectgan.py --name org_mae_shrink_vector --load_from_opt_file ckpt\org_mae_shrink_token_zero\opt.pkl --load_model_name mae_shrink_vector --save_ckpt_freq 30
+python train_defectgan.py --name org_mae_shrink_position --load_from_opt_file ckpt\org_mae_shrink_token_zero\opt.pkl --load_model_name mae_shrink_position --save_ckpt_freq 30
+python train_defectgan.py --name org_mae_shrink_full --load_from_opt_file ckpt\org_mae_shrink_token_zero\opt.pkl --load_model_name mae_shrink_full --save_ckpt_freq 30

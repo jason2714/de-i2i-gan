@@ -1,7 +1,9 @@
+import math
+
 import numpy as np
 import torch
 from torch import nn
-from models.networks.architecture import ConvBlock
+from models.networks.architecture import ConvBlock, ResBlock
 from models.networks.base_network import BaseNetwork
 
 
@@ -94,6 +96,62 @@ class DefectGanDiscriminator(BaseNetwork):
         src_logits = self.src_clf(feat)
         cls_logits = self.cls_clf(feat)
         return src_logits, cls_logits.reshape((cls_logits.size(0), cls_logits.size(1)))
+
+
+class StarGANv2Discriminator(BaseNetwork):
+    def __init__(self, opt):
+        """
+            image to image translation network
+        """
+        super().__init__()
+        assert opt.image_size in (64, 128, 256, 512, 1024), "image size should be one of [64, 128, 256, 512, 1024]"
+        num_blocks = int(math.log2(opt.image_size)) - 3
+        max_dim = 512
+        self.enc_blk = []
+        crt_dim = opt.ndf
+
+        conv_blk = [ConvBlock(opt.input_nc, crt_dim,
+                              kernel_size=(7, 7),
+                              stride=(2, 2),
+                              padding=3,
+                              padding_mode='reflect',
+                              norm_layer=None,
+                              act_layer='leaky_relu',
+                              use_spectral=False)]
+        for _ in range(num_blocks):
+            new_dim = min(crt_dim * 2, max_dim)
+            conv_blk.append(ResBlock(crt_dim, new_dim,
+                                     kernel_size=(3, 3),
+                                     stride=(1, 1),
+                                     padding='same',
+                                     padding_mode='reflect',
+                                     norm_layer=nn.InstanceNorm2d,
+                                     act_layer='leaky_relu',
+                                     use_spectral=False,
+                                     down_scale=True))
+            crt_dim = new_dim
+        self.enc_blk = nn.Sequential(*conv_blk)
+        self.cls_clf = ConvBlock(crt_dim, opt.label_nc,
+                                 kernel_size=(4, 4),
+                                 padding=0,
+                                 norm_layer=None,
+                                 act_layer=None,
+                                 use_spectral=False)
+        self.src_clf = ConvBlock(crt_dim, 1,
+                                 kernel_size=(3, 3),
+                                 stride=(1, 1),
+                                 padding='same',
+                                 padding_mode='reflect',
+                                 norm_layer=None,
+                                 act_layer=None)
+
+    def forward(self, x):
+        assert isinstance(x, torch.Tensor), "x must be Original Images: Torch.Tensor"
+        feat = self.stem(x)
+        feat = self.enc_blk(feat)
+        src_logits = self.src_clf(feat)
+        cls_logits = self.cls_clf(feat)
+        return src_logits, cls_logits.view((cls_logits.size(0), cls_logits.size(1)))
 
 
 class ViTClassifier(BaseNetwork):

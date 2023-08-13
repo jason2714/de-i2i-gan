@@ -1,0 +1,14 @@
+python train_mae.py --name mae_shrink_ratio_10 --load_from_opt_file ckpt\mae_shrink_token_zero\opt.pkl --mask_ratio 0.10 --save_ckpt_freq 100
+python train_mae.py --name mae_shrink_ratio_25 --load_from_opt_file ckpt\mae_shrink_token_zero\opt.pkl --mask_ratio 0.25 --save_ckpt_freq 100
+python train_mae.py --name mae_shrink_ratio_40 --load_from_opt_file ckpt\mae_shrink_token_zero\opt.pkl --mask_ratio 0.40 --save_ckpt_freq 100
+python train_mae.py --name mae_shrink_ratio_50 --load_from_opt_file ckpt\mae_shrink_token_zero\opt.pkl --mask_ratio 0.50 --save_ckpt_freq 100
+python train_mae.py --name mae_shrink_ratio_60 --load_from_opt_file ckpt\mae_shrink_token_zero\opt.pkl --mask_ratio 0.60 --save_ckpt_freq 100
+python train_mae.py --name mae_shrink_ratio_75 --load_from_opt_file ckpt\mae_shrink_token_zero\opt.pkl --mask_ratio 0.75 --save_ckpt_freq 100
+python train_mae.py --name mae_shrink_ratio_90 --load_from_opt_file ckpt\mae_shrink_token_zero\opt.pkl --mask_ratio 0.90 --save_ckpt_freq 100
+python train_defectgan.py --name org_mae_shrink_ratio_10 --load_from_opt_file ckpt\org_mae_shrink_token_zero\opt.pkl --load_model_name mae_shrink_ratio_10 --save_ckpt_freq 30
+python train_defectgan.py --name org_mae_shrink_ratio_25 --load_from_opt_file ckpt\org_mae_shrink_token_zero\opt.pkl --load_model_name mae_shrink_ratio_25 --save_ckpt_freq 30
+python train_defectgan.py --name org_mae_shrink_ratio_40 --load_from_opt_file ckpt\org_mae_shrink_token_zero\opt.pkl --load_model_name mae_shrink_ratio_40 --save_ckpt_freq 30
+python train_defectgan.py --name org_mae_shrink_ratio_50 --load_from_opt_file ckpt\org_mae_shrink_token_zero\opt.pkl --load_model_name mae_shrink_ratio_50 --save_ckpt_freq 30
+python train_defectgan.py --name org_mae_shrink_ratio_60 --load_from_opt_file ckpt\org_mae_shrink_token_zero\opt.pkl --load_model_name mae_shrink_ratio_60 --save_ckpt_freq 30
+python train_defectgan.py --name org_mae_shrink_ratio_75 --load_from_opt_file ckpt\org_mae_shrink_token_zero\opt.pkl --load_model_name mae_shrink_ratio_75 --save_ckpt_freq 30
+python train_defectgan.py --name org_mae_shrink_ratio_90 --load_from_opt_file ckpt\org_mae_shrink_token_zero\opt.pkl --load_model_name mae_shrink_ratio_90 --save_ckpt_freq 30

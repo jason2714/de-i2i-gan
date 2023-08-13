@@ -16,8 +16,8 @@ def load_network(net, net_label, epoch, opt):
     save_path = opt.ckpt_dir / opt.load_model_name / load_fn
     weights = torch.load(save_path)
     # TODO load weights from different model state_dict
-    weights = {k.replace('spade_', '').replace('sean_', ''): v for k, v in weights.items()}
+    # weights = {k.replace('spade_', '').replace('sean_', ''): v for k, v in weights.items()}
     # # TODO ignore mlp_latent!!!!!
-    # weights = {k.replace('spade_', '').replace('sean_', ''): v for k, v in weights.items() if 'mlp_latent' not in k}
-    net.load_state_dict(weights, strict=True)
+    weights = {k.replace('spade_', '').replace('sean_', ''): v for k, v in weights.items() if 'mlp_latent' not in k}
+    net.load_state_dict(weights, strict=False)
     return net.to(opt.device, non_blocking=True)

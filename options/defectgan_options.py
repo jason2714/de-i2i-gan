@@ -105,6 +105,8 @@ class TrainOptions(DefectGanBaseOptions, BaseTrainOptions):
         #                     help='# of iter to linearly decay learning rate to zero')
         parser.add_argument('--num_critics', type=int, default=5,
                             help='number of discriminator iterations per generator iterations.')
+        parser.add_argument('--diff_aug', help='Comma-separated list of DiffAugment policy',
+                            default='')
 
         return parser
 
@@ -133,6 +135,8 @@ class TestOptions(DefectGanBaseOptions, BaseTestOptions):
                             help='whether to calculate classifier accuracy or not')
         parser.add_argument('--vis_style_embeds', type=str, default=None,
                             help='whether to visualize sean embeddings or not, type of [hidden|mean]')
+        parser.add_argument('--save_diverse_images', action='store_true', default=False,
+                            help='whether to save diverse images or not')
 
         return parser
 
@@ -173,6 +177,10 @@ class PreTrainOptions(DefectGanBaseOptions, BaseTrainOptions):
                             help='number of discriminator iterations per generator iterations.')
         parser.add_argument('--split_training', action='store_true', default=False,
                             help='Whether to train each network individually')
+        parser.add_argument('--mask_token_type', type=str, default='position',
+                            help='type of mask token [zero|mean|scalar|vector|position|full]')
+        parser.add_argument('--diff_aug', help='Comma-separated list of DiffAugment policy',
+                            default='')
 
         # for MAE
         parser.add_argument('--patch_size', type=int, default=8, help='masked patch size, must be power of 2')

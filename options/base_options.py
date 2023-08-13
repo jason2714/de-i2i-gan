@@ -29,6 +29,7 @@ class BaseOptions:
         # for setting inputs
         parser.add_argument('--data_dir', type=Path, default='./data')
         parser.add_argument('--dataset_name', type=str, required=True, help='which dataset to use')
+        parser.add_argument('--dataset_data_type', type=str, default=None, help='which data type to use')
         parser.add_argument('--load_from_opt_file', type=Path, default=None,
                             help='load the options from checkpoints and use that as default, '
                                  'ignore if continue_training is True')

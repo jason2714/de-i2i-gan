@@ -333,3 +333,106 @@ class DefectGanGenerator(BaseNetwork):
         for attr_name, attr_value in self.named_modules():
             if isinstance(attr_value, SEAN):
                 attr_value.inference_running_stats = inference_running_stats
+
+
+class StarGANv2Generator(BaseNetwork):
+    def __init__(self, opt):
+        """
+            image to image translation network
+        """
+        super().__init__()
+        assert (opt.num_res & 1) == 0, 'num_res must be even'
+        self.opt = opt
+        self.label_nc = opt.label_nc
+
+        # stem
+        crt_dim = opt.ngf
+        max_dim = 512
+        self.stem = ConvBlock(opt.input_nc, crt_dim,
+                              kernel_size=(7, 7),
+                              padding='same',
+                              padding_mode='reflect',
+                              norm_layer=nn.InstanceNorm2d,
+                              act_layer='leaky_relu',
+                              use_spectral=opt.use_spectral)
+
+        # original blocks
+        self.down_enc_blk = nn.ModuleList()
+        self.up_dec_blk = nn.ModuleList()
+        self.enc_res_blk = nn.ModuleList()
+        self.dec_res_blk = nn.ModuleList()
+        for i in range(opt.num_scales):
+            new_dim = min(crt_dim * 2, max_dim)
+            self.down_enc_blk.append(ResBlock(crt_dim, new_dim,
+                                              kernel_size=(3, 3),
+                                              stride=(1, 1),
+                                              padding='same',
+                                              padding_mode='reflect',
+                                              norm_layer=nn.InstanceNorm2d,
+                                              act_layer='leaky_relu',
+                                              use_spectral=opt.use_spectral,
+                                              down_scale=True))
+            self.up_dec_blk.append(NormConvBlock(opt.style_norm_block_type, opt.hidden_nc,
+                                                 opt.label_nc, new_dim, crt_dim,
+                                                 embed_nc=opt.embed_nc,
+                                                 kernel_size=(3, 3),
+                                                 stride=(1, 1),
+                                                 padding='same',
+                                                 padding_mode='reflect',
+                                                 up_scale=True,
+                                                 norm_layer=nn.InstanceNorm2d,
+                                                 act_layer='relu',
+                                                 use_spectral=opt.use_spectral,
+                                                 add_noise=opt.add_noise))
+            crt_dim = new_dim
+        for i in range(opt.num_res // 2):
+            self.enc_res_blk.append(ResBlock(crt_dim, crt_dim,
+                                             kernel_size=(3, 3),
+                                             stride=(1, 1),
+                                             padding='same',
+                                             padding_mode='reflect',
+                                             norm_layer=nn.InstanceNorm2d,
+                                             act_layer='leaky_relu',
+                                             use_spectral=opt.use_spectral))
+            self.dec_res_blk.append(NormResBlock(opt.style_norm_block_type, opt.hidden_nc,
+                                                 opt.label_nc, crt_dim, crt_dim,
+                                                 embed_nc=opt.embed_nc,
+                                                 kernel_size=(3, 3),
+                                                 stride=(1, 1),
+                                                 padding='same',
+                                                 padding_mode='reflect',
+                                                 up_scale=False,
+                                                 norm_layer=nn.InstanceNorm2d,
+                                                 act_layer='relu',
+                                                 use_spectral=opt.use_spectral,
+                                                 add_noise=opt.add_noise))
+            # head
+            self.head = DeConvBlock(opt.ngf, 3,
+                                    kernel_size=(3, 3),
+                                    padding='same',
+                                    padding_mode='reflect',
+                                    up_scale=False,
+                                    norm_layer=None,
+                                    act_layer='tanh',
+                                    use_spectral=False,
+                                    add_noise=False)
+
+    def forward(self, x, labels, style_feat=None):
+        assert isinstance(x, torch.Tensor), "x must be Original Images: Torch.Tensor"
+        # expand labels' shape to the same as data
+        feat = self.stem(x)
+        for enc_blk in self.down_enc_blk:
+            feat = enc_blk(feat, labels)
+        # inner residual block section
+        for enc_res_blk in self.enc_res_blk:
+            feat = enc_res_blk(feat, labels)
+        for dec_res_blk in self.dec_res_blk:
+            feat = dec_res_blk(feat, labels, style_feat)
+        # inner residual block section
+        for dec_blk in self.up_dec_blk:
+            feat = dec_blk(feat, labels, style_feat)
+
+        if feat.isnan().any():
+            feat.nan_to_num_()
+        output = self.foreground_head(feat)
+        return output

@@ -145,7 +145,7 @@ def save_stats(opt, dataset):
 
 @torch.no_grad()
 def main():
-    fix_rand_seed(1)
+    fix_rand_seed(123)
     # defectgan_options
     opt = TestOptions().parse()
     # dataset_cls = find_dataset_using_name(opt.dataset_name)
@@ -266,6 +266,38 @@ def main():
     if opt.vis_style_embeds is not None:
         embeddings = get_style_embeddings(model, test_loaders['defects'], embed_type=opt.vis_style_embeds)
         visualize_style_embeddings(opt, embeddings, reduction_type='pca')
+
+    if opt.save_diverse_images:
+        output_dir = opt.results_dir / opt.name / 'images'
+        output_dir.mkdir(parents=True, exist_ok=True)
+        bg_data, _, _ = next(test_loaders['background'])
+        # # generate multiple defect image grid
+        _, df_labels, _ = next(iter(test_loaders['defects']))
+        row_sums = torch.sum(df_labels, dim=1)
+        # Select rows where the sum is greater than one
+        selected_labels = df_labels[row_sums > 1]
+        # Get unique label sets using numpy
+        selected_labels_np = selected_labels.numpy()
+        unique_labels_np = np.unique(selected_labels_np, axis=0)
+
+        model.networks['G'].inference_running_stats = opt.use_running_stats
+        # Convert back to PyTorch tensor
+        unique_labels = torch.from_numpy(unique_labels_np)
+        for label in unique_labels:
+            label = label.unsqueeze(0).repeat(10, 1)
+            multi_df_grid = model('generate_grid', bg_data, label, img_only=True)
+            multi_output_path = output_dir / f'Multiple_{tuple(label[0].tolist())}.png'
+            save_image(multi_df_grid, multi_output_path)
+
+        for label_index in range(1, opt.label_nc):
+            # generate single defect image grid
+            labels = torch.zeros(10, opt.label_nc)
+            labels[:, label_index] = 1
+            df_grid = model('generate_grid', bg_data, labels, img_only=True)
+            single_output_path = output_dir / f'Single_{label_index}.png'
+            save_image(df_grid, single_output_path)
+
+
 
     # model.netG.train()
     # summary(model.netG, [(3, 128, 128), (6, 1, 1)], depth=4)

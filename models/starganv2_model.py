@@ -1,7 +1,7 @@
 import random
 
-from models.networks.generator import DefectGanGenerator
-from models.networks.discriminator import DefectGanDiscriminator
+from models.networks.generator import StarGANv2Generator
+from models.networks.discriminator import StarGANv2Discriminator
 from models.networks.extractor import StyleExtractor
 from models.base_model import BaseModel
 import torch
@@ -13,7 +13,6 @@ from utils.util import generate_mask, generate_shifted_mask
 from torch import autocast
 import torchvision.transforms as transforms
 from models.networks.architecture import MaskToken
-from utils.diffaug import DiffAugment
 
 
 class DefectGanModel(BaseModel):
@@ -21,15 +20,14 @@ class DefectGanModel(BaseModel):
         super().__init__(opt)
         image_size = opt.image_size
         assert image_size & (image_size - 1) == 0, 'Image size must be a power of 2'
-        self.netG = DefectGanGenerator(opt).to(opt.device, non_blocking=True)
-        self.netD = DefectGanDiscriminator(opt).to(opt.device, non_blocking=True)
+        self.netG = StarGANv2Generator(opt).to(opt.device, non_blocking=True)
+        self.netD = StarGANv2Discriminator(opt).to(opt.device, non_blocking=True)
         if self.opt.is_train or hasattr(opt, 'clf_loss_type'):
             assert opt.clf_loss_type is not None, 'clf_loss_type should be initialized in dataset'
             self.clf_loss_type = opt.clf_loss_type
 
         # learnable mask token
-        if hasattr(opt, 'mask_token_type'):
-            self.mask_token = MaskToken(opt).to(opt.device, non_blocking=True)
+        self.mask_token = MaskToken(opt).to(opt.device, non_blocking=True)
 
         # style embedding
         if opt.style_norm_block_type == 'sean':
@@ -51,57 +49,57 @@ class DefectGanModel(BaseModel):
         if df_data is not None:
             df_data = df_data.to(self.opt.device, non_blocking=True)
         # for mae
-        # with autocast(device_type='cuda'):
-        if mode.startswith('mae'):
-            # TODO input df_data
-            if mode == 'mae_generator':
-                self.netD.eval()
-                self.netG.train()
-                return self._compute_mae_generator_loss(data, labels)
-            elif mode == 'mae_discriminator':
-                self.netD.train()
-                self.netG.eval()
-                return self._compute_mae_discriminator_loss(data, labels)
-            elif mode == 'mae_inference':
-                self.netD.eval()
-                self.netG.eval()
-                with torch.no_grad():
-                    if self.opt.split_training:
-                        rec_loss, gan_loss, _ = self._compute_mae_inference_loss(data, labels)
-                        _, clf_loss = self._compute_mae_discriminator_loss(data, labels)
-                        return rec_loss, gan_loss, clf_loss
-                    else:
-                        return self._compute_mae_inference_loss(data, labels)
-            elif mode == 'mae_generate_grid':
-                self.netD.eval()
-                self.netG.eval()
-                return self._generate_repair_mask_grid(data, labels)
+        with autocast(device_type='cuda'):
+            if mode.startswith('mae'):
+                # TODO input df_data
+                if mode == 'mae_generator':
+                    self.netD.eval()
+                    self.netG.train()
+                    return self._compute_mae_generator_loss(data, labels)
+                elif mode == 'mae_discriminator':
+                    self.netD.train()
+                    self.netG.eval()
+                    return self._compute_mae_discriminator_loss(data, labels)
+                elif mode == 'mae_inference':
+                    self.netD.eval()
+                    self.netG.eval()
+                    with torch.no_grad():
+                        if self.opt.split_training:
+                            rec_loss, gan_loss, _ = self._compute_mae_inference_loss(data, labels)
+                            _, clf_loss = self._compute_mae_discriminator_loss(data, labels)
+                            return rec_loss, gan_loss, clf_loss
+                        else:
+                            return self._compute_mae_inference_loss(data, labels)
+                elif mode == 'mae_generate_grid':
+                    self.netD.eval()
+                    self.netG.eval()
+                    return self._generate_repair_mask_grid(data, labels)
+                else:
+                    raise ValueError(f"|mode {mode}| is invalid")
+            # for defectgan
             else:
-                raise ValueError(f"|mode {mode}| is invalid")
-        # for defectgan
-        else:
-            if mode == 'generator':
-                self.netD.eval()
-                self.netG.train()
-                return self._compute_generator_loss(data, labels, df_data)
-            elif mode == 'discriminator':
-                self.netD.train()
-                self.netG.eval()
-                return self._compute_discriminator_loss(data, labels, df_data)
-            elif mode == 'inference':
-                self.netD.eval()
-                self.netG.eval()
-                return self._generate_fake(data, labels)
-            elif mode == 'generate_grid':
-                self.netD.eval()
-                self.netG.eval()
-                return self._generate_fake_grids(data, labels, img_only)
-            elif mode == 'inference_classifier':
-                self.netD.eval()
-                self.netG.eval()
-                return self._compute_clf_loss(data, labels)
-            else:
-                raise ValueError(f"|mode {mode}| is invalid")
+                if mode == 'generator':
+                    self.netD.eval()
+                    self.netG.train()
+                    return self._compute_generator_loss(data, labels, df_data)
+                elif mode == 'discriminator':
+                    self.netD.train()
+                    self.netG.eval()
+                    return self._compute_discriminator_loss(data, labels, df_data)
+                elif mode == 'inference':
+                    self.netD.eval()
+                    self.netG.eval()
+                    return self._generate_fake(data, labels)
+                elif mode == 'generate_grid':
+                    self.netD.eval()
+                    self.netG.eval()
+                    return self._generate_fake_grids(data, labels, img_only)
+                elif mode == 'inference_classifier':
+                    self.netD.eval()
+                    self.netG.eval()
+                    return self._compute_clf_loss(data, labels)
+                else:
+                    raise ValueError(f"|mode {mode}| is invalid")
 
     def _compute_mae_generator_loss(self, imgs, labels):
 
@@ -197,10 +195,6 @@ class DefectGanModel(BaseModel):
                 self.netG.track_running_stats = False
 
         # discriminator
-        # TODO test diff_aug
-        fake_defects = DiffAugment(fake_defects, self.opt.diff_aug)
-        fake_normals = DiffAugment(fake_normals, self.opt.diff_aug)
-        # TODO test diff_aug
         fake_defects_src, fake_defects_cls = self.netD(fake_defects)
         fake_normals_src, fake_normals_cls = self.netD(fake_normals)
 
@@ -263,12 +257,6 @@ class DefectGanModel(BaseModel):
         fake_normals.requires_grad = True
 
         # discriminator
-        # TODO test diff_aug
-        fake_defects = DiffAugment(fake_defects, self.opt.diff_aug)
-        fake_normals = DiffAugment(fake_normals, self.opt.diff_aug)
-        df_data = DiffAugment(df_data, self.opt.diff_aug)
-        bg_data = DiffAugment(bg_data, self.opt.diff_aug)
-        # TODO test diff_aug
         fake_defects_src, _ = self.netD(fake_defects.detach_())
         fake_normals_src, _ = self.netD(fake_normals.detach_())
         real_defects_src, real_defects_cls = self.netD(df_data)
@@ -314,34 +302,17 @@ class DefectGanModel(BaseModel):
             raise ValueError(f"|style_norm_block_type {self.opt.style_norm_block_type}| is invalid")
 
     @torch.no_grad()
-    def _generate_fake_grids(self, bg_data, labels, img_only=False):
-        df_images = []
-        for data in bg_data:
+    def _generate_fake_grids(self, src_data, labels):
+        tgt_images = []
+        for data in src_data:
             data = data.unsqueeze(0)
-            df_images.append(data.add(1).div(2))
-            df_data, df_prob = self._generate_fake(data.repeat(labels.size(0), 1, 1, 1), labels)
-            if img_only:
-                df_data.add_(1).div_(2)
-                df_images.append(df_data)
-            else:
-                if self.opt.cycle_gan:
-                    foreground = df_data
-                else:
-                    foreground = df_data.sub(data.mul(1 - df_prob)).div(df_prob.add(1e-8)).clamp_(-1, 1)
-                df_data.add_(1).div_(2)
-                foreground.add_(1).div_(2)
-                new_df_prob = df_prob.repeat(1, 3, 1, 1)
-                for idx, slice_prob in enumerate(df_prob.cpu()):
-                    slice_prob = slice_prob.squeeze(0)
-                    heatmap = cv2.cvtColor(cv2.applyColorMap(np.uint8(255 * slice_prob), cv2.COLORMAP_JET),
-                                           cv2.COLOR_BGR2RGB)
-                    new_df_prob[idx, :] = torch.from_numpy(heatmap.transpose(2, 0, 1)).to(self.netG.device)
-                new_df_prob.div_(255.)
-                df_images.append(torch.stack([df_data, new_df_prob, foreground], dim=1).flatten(0, 1))
-        df_images = torch.cat([*df_images], dim=0)
-        nrow = 1 + (labels.size(0) if img_only else 3 * labels.size(0))
-        df_grid = make_grid(df_images, nrow=nrow)
-        return df_grid
+            tgt_images.append(data.add(1).div(2))
+            transform_images = self._generate_fake(data.repeat(labels.size(0), 1, 1, 1), labels)
+            transform_images.add_(1).div_(2)
+            tgt_images.append(transform_images)
+        tgt_images = torch.cat([*tgt_images], dim=0)
+        nrow = 1 + labels.size(0)
+        return make_grid(tgt_images, nrow=nrow)
 
     @torch.no_grad()
     def _generate_repair_mask_grid(self, imgs, labels):
@@ -363,19 +334,23 @@ class DefectGanModel(BaseModel):
         # masks = generate_mask(imgs.size(), self.opt.patch_size, self.opt.mask_ratio)
         masks = generate_shifted_mask(imgs.size(), self.opt.patch_size, self.opt.mask_ratio)
         masks = masks.to(self.opt.device, non_blocking=True)
+        masked_imgs = imgs * masks
 
-        masked_imgs = self.mask_token(imgs, masks)
+        # mean of unmasked
+        # img_mean = masked_imgs.mean(dim=(2, 3)) / self.opt.mask_ratio
+        # img_mean = img_mean.reshape(*img_mean.size()[:2], 1, 1)
+        masked_imgs = self.mask_token(masked_imgs, masks)
 
         if self.opt.style_norm_block_type == 'sean':
             style_feat = self._get_style_embeds(labels)
-            predicted_imgs, _ = self.netG(masked_imgs, labels, style_feat)
+            predicted_imgs = self.netG(masked_imgs, labels, style_feat)
         elif self.opt.style_norm_block_type == 'spade':
             # seg = self._expand_seg(torch.zeros_like(labels))
             seg = self._expand_seg(labels)
-            predicted_imgs, _ = self.netG(masked_imgs, seg)
+            predicted_imgs = self.netG(masked_imgs, seg)
         elif self.opt.style_norm_block_type == 'adain':
             style_feat = self.netE(imgs, labels)
-            predicted_imgs, _ = self.netG(masked_imgs, labels, style_feat)
+            predicted_imgs = self.netG(masked_imgs, labels, style_feat)
         else:
             raise ValueError(f"|style_norm_block_type {self.opt.style_norm_block_type}| is invalid")
 
@@ -397,8 +372,8 @@ class DefectGanModel(BaseModel):
             return torch.randn(labels.size(0), self.opt.hidden_nc).to(self.netG.device)
         else:
             embed_list = []
-            # num_embeds = random.randint(1, self.opt.num_embeds)
-            num_embeds = self.opt.num_embeds
+            num_embeds = random.randint(1, self.opt.num_embeds)
+            # num_embeds = self.opt.num_embeds
             for label in labels:
                 tuple_label = tuple(label.int().tolist())
                 if not self.embeddings[tuple_label]:
@@ -409,19 +384,17 @@ class DefectGanModel(BaseModel):
                 embed_list.append(mean_embed)
             return torch.stack(embed_list)
 
-    def _get_label_and_style_feat(self, bg_data, df_labels, df_data):
-        nm_labels = torch.zeros_like(df_labels, dtype=torch.float).to(self.netD.device, non_blocking=True)
-        nm_labels[:, 0] = 1
-        df_label_feat = nm_label_feat = None
+    def _get_label_and_style_feat(self, src_data, src_labels, tgt_data, tgt_labels):
+        src_label_feat = tgt_label_feat = None
         if self.opt.style_norm_block_type == 'sean':
-            nm_label_feat = self._get_style_embeds(nm_labels)
-            df_label_feat = self._get_style_embeds(df_labels)
+            src_label_feat = self._get_style_embeds(src_labels)
+            tgt_label_feat = self._get_style_embeds(tgt_labels)
         elif self.opt.style_norm_block_type == 'spade':
-            nm_labels = self._expand_seg(nm_labels)
-            df_labels = self._expand_seg(df_labels)
+            src_labels = self._expand_seg(src_labels)
+            tgt_labels = self._expand_seg(tgt_labels)
         elif self.opt.style_norm_block_type == 'adain':
-            nm_label_feat = self.netE(bg_data, nm_labels)
-            df_label_feat = self.netE(df_data, df_labels)
+            src_label_feat = self.netE(src_data, src_labels)
+            tgt_label_feat = self.netE(tgt_data, tgt_labels)
         else:
             raise ValueError(f"|style_norm_block_type {self.opt.style_norm_block_type}| is invalid")
-        return nm_labels, nm_label_feat, df_labels, df_label_feat
+        return src_labels, src_label_feat, tgt_labels, tgt_label_feat

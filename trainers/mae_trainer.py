@@ -55,13 +55,15 @@ class MAETrainer(BaseTrainer):
                 repaired_grid = self.model('mae_generate_grid', data, labels)
                 writer.add_image(f'Images/{data_type}', repaired_grid, epoch)
 
-            mask_token = self.model.mask_token.mask_token.detach().clone() \
-                .view(self.model.mask_token.mask_token.size(1), self.opt.image_size, self.opt.image_size).cpu()
-            mask_token = mask_token - mask_token.min()
-            mask_token = mask_token / mask_token.max()
-            # heatmap = cv2.cvtColor(cv2.applyColorMap(np.uint8(255 * mask_token), cv2.COLORMAP_JET), cv2.COLOR_BGR2RGB)
-            # mask_token = torch.from_numpy(heatmap.transpose(2, 0, 1)).float() / 255
-            writer.add_image(f'Images/mask_token', mask_token, epoch)
+            if self.opt.mask_token_type in ('scalar', 'vector', 'position', 'full'):
+                mask_token = self.model.mask_token.mask_token.detach().clone().squeeze(0).cpu()
+                mask_token = mask_token.expand(self.opt.input_nc, self.opt.image_size, self.opt.image_size)
+                # mask_token = mask_token - mask_token.min()
+                # mask_token = mask_token / mask_token.max()
+                # heatmap = cv2.cvtColor(cv2.applyColorMap(np.uint8(255 * mask_token), cv2.COLORMAP_JET), cv2.COLOR_BGR2RGB)
+                # mask_token = torch.from_numpy(heatmap.transpose(2, 0, 1)).float() / 255
+                mask_token = torch.clamp(mask_token, -1, 1).add(1).div(2)
+                writer.add_image(f'Images/mask_token', mask_token, epoch)
 
     def train(self, train_loaders, val_loaders=None):
         """
@@ -130,27 +132,15 @@ class MAETrainer(BaseTrainer):
         else:
             rec_loss, gan_loss, clf_loss = self.model('mae_generator', data, labels)
             g_loss = gan_loss + rec_loss * self.loss_weights['rec'] + clf_loss * self.loss_weights['clf_G']
-        # self.scaler.scale(g_loss).backward()
-        # self.scaler.step(self.optimizers['G'])
-        # if self.opt.style_norm_block_type == 'adain':
-        #     self.scaler.step(self.optimizers['E'])
-        # self.scaler.update()
-        # for name, param in self.model.networks['G'].named_parameters():
-        #     if param.grad is not None:
-        #         print(name, param.grad.sum())
-        #     else:
-        #         print(name, param.grad)
-        g_loss.backward()
-        # print('-' * 100)
-        # for name, param in self.model.networks['G'].named_parameters():
-        #     print(name, param.sum())
-        # print('-' * 100)
-        self.optimizers['G'].step()
-        # for name, param in self.model.networks['G'].named_parameters():
-        #     print(name, param.sum())
-        # exit()
+        self.scaler.scale(g_loss).backward()
+        self.scaler.step(self.optimizers['G'])
         if self.opt.style_norm_block_type == 'adain':
-            self.optimizers['E'].step()
+            self.scaler.step(self.optimizers['E'])
+        self.scaler.update()
+        # g_loss.backward()
+        # self.optimizers['G'].step()
+        # if self.opt.style_norm_block_type == 'adain':
+        #     self.optimizers['E'].step()
         self.losses['rec']['train'].append(rec_loss.item())
         self.losses['gan']['G'].append(gan_loss.item())
         self.losses['clf']['G'].append(clf_loss.item())
@@ -159,10 +149,10 @@ class MAETrainer(BaseTrainer):
         self.optimizers['D'].zero_grad()
         gan_loss, clf_loss = self.model('mae_discriminator', data, labels)
         d_loss = gan_loss + clf_loss * self.loss_weights['clf_D']
-        # self.scaler.scale(d_loss).backward()
-        # self.scaler.step(self.optimizers['D'])
-        # self.scaler.update()
-        d_loss.backward()
-        self.optimizers['D'].step()
+        self.scaler.scale(d_loss).backward()
+        self.scaler.step(self.optimizers['D'])
+        self.scaler.update()
+        # d_loss.backward()
+        # self.optimizers['D'].step()
         self.losses['gan']['D'].append(gan_loss.item())
         self.losses['clf']['D'].append(clf_loss.item())

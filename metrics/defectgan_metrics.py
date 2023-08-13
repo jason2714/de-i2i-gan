@@ -34,7 +34,7 @@ def calculate_lpips_from_model(opt, model, bg_loader, df_loader, metric_models, 
             batch_bg_img = slice_bg_img.unsqueeze(0).expand(opt.num_lpips_images, -1, -1, -1)
             batch_df_label = df_label.unsqueeze(0).expand(opt.num_lpips_images, -1)
             fake_imgs, _ = model('inference', batch_bg_img, batch_df_label)
-            comb_imgs = torch.stack([torch.stack(img_pair) for img_pair in combinations(fake_imgs, 2)])
+            comb_imgs = torch.stack([torch.stack(img_pair) for img_pair in combinations(fake_imgs.clamp(-1, 1), 2)])
             lpips_scores.append(metric_models['lpips'](comb_imgs[:, 0], comb_imgs[:, 1]))
         image_nums += df_labels.size(0)
     metrics['lpips'] = torch.mean(torch.stack(lpips_scores)).item()
