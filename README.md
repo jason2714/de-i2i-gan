@@ -1,6 +1,48 @@
 # de-i2i-gan
 data efficient GAN for image-to-image translation
 
+# Training
+```shell
+# pre-train MAE-GAN
+python train_mae.py --name mae --dataset_name codebrim_shrink \
+--data_dir {data_dir} \
+--phase val --add_noise --use_spectral \
+--lr 1.5e-4 5e-4 --patch_size 16
+
+# pre-train MAE-GAN with SEAN
+python train_mae.py --name mae_sean --dataset_name codebrim_shrink \
+--data_dir {data_dir} \
+--phase val --add_noise --use_spectral \
+--lr 1.5e-4 5e-4 --patch_size 16 \
+--embed_path {embedding_path_tovit_extracted_feature.pth}  \
+--style_norm_block_type sean
+
+# training defectGAN
+python train_defectgan.py --data_dir {data_dir} --dataset_name codebrim_shrink  \
+--name defectgan --npz_path {npz_file_for_calculating_fid.npz} \
+--loss_weight 2 5 10 1 3 --num_iters 20_000 --save_latest_freq 200 \
+--phase val --add_noise --use_spectral  --scheduler cos \
+
+# training defectGAN with SEAN
+python train_defectgan.py --data_dir {data_dir} --dataset_name codebrim_shrink \
+--name defectgan_sean --npz_path {npz_file_for_calculating_fid.npz} \
+--loss_weight 2 5 10 1 3 --num_iters 20_000 --save_latest_freq 200 \
+--phase val --add_noise --use_spectral  --scheduler cos \
+--style_norm_block_type sean --embed_path {embedding_path_tovit_extracted_feature.pth}
+
+# if you want to use the pre-trained model, add this argument
+--load_model_name {ckpt_model_name}
+# e.g. --load_model_name mae
+
+```
+
+# Testing
+```shell
+python test_defectgan.py --name org \
+--data_dir {data_dir} --batch_size 32 --add_noise --use_spectral \
+--npz_path {npz_file_for_calculating_fid.npz}
+```
+
 # architecture
 The major architecture of G mainly follows the commonly used image-to-image translation networks, which first encodes the input image by a stride of 4, and then decodes it to its original size.
 
