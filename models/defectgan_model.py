@@ -46,7 +46,7 @@ class DefectGanModel(BaseModel):
         elif opt.style_norm_block_type == 'adain':
             self.netE = StyleExtractor(opt).to(opt.device, non_blocking=True)
 
-    def __call__(self, mode, data, labels, df_data=None, img_only=False):
+    def __call__(self, mode, data, labels, df_data=None, img_only=False, mask=None):
         data, labels = data.to(self.opt.device, non_blocking=True), labels.to(self.opt.device, non_blocking=True)
         if df_data is not None:
             df_data = df_data.to(self.opt.device, non_blocking=True)
@@ -75,7 +75,7 @@ class DefectGanModel(BaseModel):
             elif mode == 'mae_generate_grid':
                 self.netD.eval()
                 self.netG.eval()
-                return self._generate_repair_mask_grid(data, labels)
+                return self._generate_repair_mask_grid(data, labels, mask)
             else:
                 raise ValueError(f"|mode {mode}| is invalid")
         # for defectgan
@@ -344,8 +344,8 @@ class DefectGanModel(BaseModel):
         return df_grid
 
     @torch.no_grad()
-    def _generate_repair_mask_grid(self, imgs, labels):
-        predicted_imgs, masks = self._repair_mask(imgs, labels)
+    def _generate_repair_mask_grid(self, imgs, labels, mask=None):
+        predicted_imgs, masks = self._repair_mask(imgs, labels, mask)
         masked_imgs = imgs * masks
         predicted_masked_imgs = predicted_imgs * (1 - masks)
         combine_imgs = masked_imgs + predicted_masked_imgs
@@ -358,10 +358,11 @@ class DefectGanModel(BaseModel):
 
         return make_grid(grid_imgs, nrow=nrow)
 
-    def _repair_mask(self, imgs, labels):
+    def _repair_mask(self, imgs, labels, mask=None):
         # generate and apply mask
         # masks = generate_mask(imgs.size(), self.opt.patch_size, self.opt.mask_ratio)
-        masks = generate_shifted_mask(imgs.size(), self.opt.patch_size, self.opt.mask_ratio)
+        if mask is None:
+            masks = generate_shifted_mask(imgs.size(), self.opt.patch_size, self.opt.mask_ratio)
         masks = masks.to(self.opt.device, non_blocking=True)
 
         masked_imgs = self.mask_token(imgs, masks)
