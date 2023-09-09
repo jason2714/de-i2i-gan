@@ -616,7 +616,7 @@ class FeatureExtractor(nn.Module):
 
             # update running stats
             if self._track_running_stats:
-                for y, style_code in zip(y_ref, style_codes.clone().detach()):
+                for y, style_code in zip(y_ref, style_codes.clone().detach().cpu()):
                     self._style_codes[y.item()] += [style_code]
         return style_codes
 
