@@ -243,7 +243,7 @@ class SEAN(nn.Module):
         self.label_nc = label_nc
 
         self.hidden_nc = hidden_nc
-        self.reduce_rate = 1
+        self.reduce_rate = 4
         self.norm_nc = norm_nc
         # self.hidden_nc = norm_nc
         # hidden_nc = norm_nc
