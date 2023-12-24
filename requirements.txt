@@ -7,3 +7,4 @@ pillow
 scipy
 tqdm
 munch
+transformers

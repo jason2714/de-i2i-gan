@@ -136,106 +136,6 @@ class HighPass(nn.Module):
         return F.conv2d(x, filter, padding=1, groups=x.size(1))
 
 
-# class SEAN(nn.Module):
-#     def __init__(self, embed_nc, norm_nc, label_nc, hidden_nc=128):
-#         super().__init__()
-#
-#         self.label_nc = label_nc
-#
-#         self.hidden_nc = hidden_nc
-#         # self.hidden_nc = norm_nc
-#         # hidden_nc = norm_nc
-#
-#         self.alpha = 1.
-#         self.param_free_norm = nn.InstanceNorm2d(norm_nc, affine=False)
-#         # The dimension of the intermediate embedding space. Yes, hardcoded.
-#
-#         self.mlp_shared = nn.Sequential(nn.Linear(embed_nc, hidden_nc), nn.ReLU(inplace=True))
-#         self.mlp_gamma = nn.Linear(hidden_nc, norm_nc)
-#         self.mlp_beta = nn.Linear(hidden_nc, norm_nc)
-#         self.label_embedding = nn.Embedding(label_nc, hidden_nc)
-#
-#         # self.means = nn.ParameterDict()
-#         self.create_stats()
-#         self.inference_running_stats = False
-#         self.track_running_stats = False
-#         self.num_embeds_tracked = 10_000
-#         self.std_weight = 1
-#         self.mix_alpha = None
-#
-#     def _mix_embeddings(self, embeds):
-#         if self.mix_alpha is None:
-#             if embeds.dim() == 3:
-#                 embeds = embeds.mean(dim=1)
-#         else:
-#             if embeds.dim() == 3:
-#                 assert self.mix_alpha.size(0) == embeds.size(0) and self.mix_alpha.size(1) == embeds.size(1), \
-#                     f'embeds size {embeds.size()} and mix_alpha size {self.mix_alpha.size()} do not match'
-#                 for i in range(len(self.mix_alpha)):
-#                     self.mix_alpha[i] = self.mix_alpha[i] / self.mix_alpha[i].sum()
-#                 embeds = torch.sum(embeds * self.mix_alpha, dim=1)
-#         return embeds
-#
-#     def create_stats(self):
-#         labels = torch.eye(self.label_nc, dtype=int)
-#         for l in labels:
-#             self.register_buffer(f'mean_{torch.argmax(l)}', torch.zeros(self.hidden_nc))
-#             self.register_buffer(f'std_{torch.argmax(l)}', torch.zeros(self.hidden_nc))
-#         self.embeds = {torch.argmax(l).item(): [] for l in labels}
-#
-#     def update_stats(self):
-#         eps = 1e-5
-#         for l in self.embeds.keys():
-#             if self.embeds[l]:
-#                 mean = getattr(self, f'mean_{l}')
-#                 std = getattr(self, f'std_{l}')
-#                 # for i in range(len(self.embeds[l])):
-#                 #     self.embeds[l][i] = self.embeds[l][i].to('cuda:0')
-#                 feat = torch.stack(self.embeds[l], dim=0)
-#                 _, C = feat.size()
-#                 correction = int(len(self.embeds[l]) > 1)
-#                 feat_var = feat.var(dim=0, correction=correction) + eps
-#                 feat_std = feat_var.sqrt()
-#                 feat_mean = feat.mean(dim=0)
-#                 mean[:], std[:] = feat_mean, feat_std
-#                 self.embeds[l] = self.embeds[l][-self.num_embeds_tracked:]
-#
-#     def forward(self, x, labels, feat=None):
-#         N, C = x.size()[:2]
-#         # Part 1. generate parameter-free normalized activations
-#         normalized = self.param_free_norm(x)
-#
-#         # Part 2. produce scaling and bias conditioned on semantic map
-#         if self.inference_running_stats:
-#             mix_feat = torch.empty(N, self.hidden_nc).to(x.device)
-#             # feat = torch.randn(x.size(0), self.hidden_nc).to(x.device)
-#             for i, (label, noise_vector) in enumerate(zip(labels, feat)):
-#                 mean = getattr(self, f'mean_{label.item()}')
-#                 std = getattr(self, f'std_{label.item()}')
-#                 mix_feat[i] = noise_vector * std * self.std_weight + mean
-#         else:
-#             enc_feat = self.mlp_shared(feat)
-#             latent_code = self.label_embedding(labels)
-#             mix_feat = enc_feat + latent_code.view(latent_code.size(0), 1, -1)
-#             # mix_feat = enc_feat
-#             mix_feat = self._mix_embeddings(mix_feat)
-#             if self.track_running_stats:
-#                 for label, single_feat in zip(labels, mix_feat.clone().detach()):
-#                     if mix_feat.dim() == 3:
-#                         for slice_feat in single_feat:
-#                             self.embeds[label.item()].append(slice_feat)
-#                     else:
-#                         self.embeds[label.item()].append(single_feat)
-#         mix_feat = mix_feat.view(-1, self.hidden_nc)
-#         gamma = self.mlp_gamma(mix_feat).view(-1, C, 1, 1)
-#         beta = self.mlp_beta(mix_feat).view(-1, C, 1, 1)
-#
-#         # apply scale and bias
-#         out = normalized * (1 + gamma) + beta
-#
-#         return out
-
-
 class SEAN(nn.Module):
     def __init__(self, embed_nc, norm_nc, label_nc, hidden_nc=128):
         super().__init__()
@@ -243,8 +143,6 @@ class SEAN(nn.Module):
         self.label_nc = label_nc
 
         self.hidden_nc = hidden_nc
-        self.reduce_rate = 4
-        self.norm_nc = norm_nc
         # self.hidden_nc = norm_nc
         # hidden_nc = norm_nc
 
@@ -252,10 +150,55 @@ class SEAN(nn.Module):
         self.param_free_norm = nn.InstanceNorm2d(norm_nc, affine=False)
         # The dimension of the intermediate embedding space. Yes, hardcoded.
 
-        self.mlp_shared = nn.Sequential(nn.Linear(hidden_nc, norm_nc // self.reduce_rate), nn.ReLU(inplace=True))
-        self.mlp_gamma = nn.Linear(norm_nc // self.reduce_rate, norm_nc)
-        self.mlp_beta = nn.Linear(norm_nc // self.reduce_rate, norm_nc)
-        self.label_embedding = nn.Embedding(label_nc, norm_nc // self.reduce_rate)
+        self.mlp_shared = nn.Sequential(nn.Linear(embed_nc, hidden_nc), nn.ReLU(inplace=True))
+        self.mlp_gamma = nn.Linear(hidden_nc, norm_nc)
+        self.mlp_beta = nn.Linear(hidden_nc, norm_nc)
+        self.label_embedding = nn.Embedding(label_nc, hidden_nc)
+
+        # self.means = nn.ParameterDict()
+        self.create_stats()
+        self.inference_running_stats = False
+        self.track_running_stats = False
+        self.num_embeds_tracked = 10_000
+        self.std_weight = 1
+        self.mix_alpha = None
+
+    def _mix_embeddings(self, embeds):
+        if self.mix_alpha is None:
+            if embeds.dim() == 3:
+                embeds = embeds.mean(dim=1)
+        else:
+            if embeds.dim() == 3:
+                assert self.mix_alpha.size(0) == embeds.size(0) and self.mix_alpha.size(1) == embeds.size(1), \
+                    f'embeds size {embeds.size()} and mix_alpha size {self.mix_alpha.size()} do not match'
+                for i in range(len(self.mix_alpha)):
+                    self.mix_alpha[i] = self.mix_alpha[i] / self.mix_alpha[i].sum()
+                embeds = torch.sum(embeds * self.mix_alpha, dim=1)
+        return embeds
+
+    def create_stats(self):
+        labels = torch.eye(self.label_nc, dtype=int)
+        for l in labels:
+            self.register_buffer(f'mean_{torch.argmax(l)}', torch.zeros(self.hidden_nc))
+            self.register_buffer(f'std_{torch.argmax(l)}', torch.zeros(self.hidden_nc))
+        self.embeds = {torch.argmax(l).item(): [] for l in labels}
+
+    def update_stats(self):
+        eps = 1e-5
+        for l in self.embeds.keys():
+            if self.embeds[l]:
+                mean = getattr(self, f'mean_{l}')
+                std = getattr(self, f'std_{l}')
+                # for i in range(len(self.embeds[l])):
+                #     self.embeds[l][i] = self.embeds[l][i].to('cuda:0')
+                feat = torch.stack(self.embeds[l], dim=0)
+                _, C = feat.size()
+                correction = int(len(self.embeds[l]) > 1)
+                feat_var = feat.var(dim=0, correction=correction) + eps
+                feat_std = feat_var.sqrt()
+                feat_mean = feat.mean(dim=0)
+                mean[:], std[:] = feat_mean, feat_std
+                self.embeds[l] = self.embeds[l][-self.num_embeds_tracked:]
 
     def forward(self, x, labels, feat=None):
         N, C = x.size()[:2]
@@ -263,9 +206,27 @@ class SEAN(nn.Module):
         normalized = self.param_free_norm(x)
 
         # Part 2. produce scaling and bias conditioned on semantic map
-        enc_feat = self.mlp_shared(feat).view(-1, self.norm_nc // self.reduce_rate)
-        latent_code = self.label_embedding(labels).view(-1, self.norm_nc // self.reduce_rate)
-        mix_feat = enc_feat + latent_code
+        if self.inference_running_stats:
+            mix_feat = torch.empty(N, self.hidden_nc).to(x.device)
+            # feat = torch.randn(x.size(0), self.hidden_nc).to(x.device)
+            for i, (label, noise_vector) in enumerate(zip(labels, feat)):
+                mean = getattr(self, f'mean_{label.item()}')
+                std = getattr(self, f'std_{label.item()}')
+                mix_feat[i] = noise_vector * std * self.std_weight + mean
+        else:
+            enc_feat = self.mlp_shared(feat)
+            latent_code = self.label_embedding(labels)
+            mix_feat = enc_feat + latent_code.view(latent_code.size(0), 1, -1)
+            # mix_feat = enc_feat
+            mix_feat = self._mix_embeddings(mix_feat)
+            if self.track_running_stats:
+                for label, single_feat in zip(labels, mix_feat.clone().detach()):
+                    if mix_feat.dim() == 3:
+                        for slice_feat in single_feat:
+                            self.embeds[label.item()].append(slice_feat)
+                    else:
+                        self.embeds[label.item()].append(single_feat)
+        mix_feat = mix_feat.view(-1, self.hidden_nc)
         gamma = self.mlp_gamma(mix_feat).view(-1, C, 1, 1)
         beta = self.mlp_beta(mix_feat).view(-1, C, 1, 1)
 
@@ -273,6 +234,45 @@ class SEAN(nn.Module):
         out = normalized * (1 + gamma) + beta
 
         return out
+
+
+# class SEAN(nn.Module):
+#     def __init__(self, embed_nc, norm_nc, label_nc, hidden_nc=128):
+#         super().__init__()
+#
+#         self.label_nc = label_nc
+#
+#         self.hidden_nc = hidden_nc
+#         self.reduce_rate = 4
+#         self.norm_nc = norm_nc
+#         # self.hidden_nc = norm_nc
+#         # hidden_nc = norm_nc
+#
+#         self.alpha = 1.
+#         self.param_free_norm = nn.InstanceNorm2d(norm_nc, affine=False)
+#         # The dimension of the intermediate embedding space. Yes, hardcoded.
+#
+#         self.mlp_shared = nn.Sequential(nn.Linear(hidden_nc, norm_nc // self.reduce_rate), nn.ReLU(inplace=True))
+#         self.mlp_gamma = nn.Linear(norm_nc // self.reduce_rate, norm_nc)
+#         self.mlp_beta = nn.Linear(norm_nc // self.reduce_rate, norm_nc)
+#         self.label_embedding = nn.Embedding(label_nc, norm_nc // self.reduce_rate)
+#
+#     def forward(self, x, labels, feat=None):
+#         N, C = x.size()[:2]
+#         # Part 1. generate parameter-free normalized activations
+#         normalized = self.param_free_norm(x)
+#
+#         # Part 2. produce scaling and bias conditioned on semantic map
+#         enc_feat = self.mlp_shared(feat).view(-1, self.norm_nc // self.reduce_rate)
+#         latent_code = self.label_embedding(labels).view(-1, self.norm_nc // self.reduce_rate)
+#         mix_feat = enc_feat + latent_code
+#         gamma = self.mlp_gamma(mix_feat).view(-1, C, 1, 1)
+#         beta = self.mlp_beta(mix_feat).view(-1, C, 1, 1)
+#
+#         # apply scale and bias
+#         out = normalized * (1 + gamma) + beta
+#
+#         return out
 
 
 class SEANResBlk(nn.Module):
@@ -541,22 +541,6 @@ class FeatureExtractor(nn.Module):
         self.extractor = ViTForImageClassification. \
             from_pretrained(f'google/vit-base-patch16-224', output_hidden_states=True).eval()
         self.extractor.requires_grad_(False)
-        self.resize = transforms.Resize((224, 224), antialias=False)
-        self.unshared = nn.Linear(embed_nc, hidden_nc)
-        self.actv = nn.ReLU()
-        self._style_codes = None
-        self.track_running_stats = False
-        self.inference_running_stats = False
-        self._num_tracked_style_code = 10_000
-        self._std_weight = 1
-        self._create_stats()
-
-    def _create_stats(self):
-        labels = torch.arange(self.num_domains)
-        for l in labels:
-            self.register_buffer(f'mean_{l.item()}', torch.zeros(self.hidden_nc))
-            self.register_buffer(f'std_{l.item()}', torch.zeros(self.hidden_nc))
-        self._style_codes = {l.item(): [] for l in labels}
 
     def extract_features(self, x_ref, num_embeds):
         """
@@ -583,72 +567,128 @@ class FeatureExtractor(nn.Module):
             raise NotImplementedError(f'Wrong dimension [{x_ref.dim()}]')
         return s_trg
 
-    def reduce_dimension(self, features):
-        domain_features = self.unshared(self.actv(features))
-        # (n, hidden_nc) or (n, num_embeds, hidden_nc)
-        if domain_features.dim() == 3:
-            domain_features = domain_features.mean(dim=1)  # (batch, hidden_nc)
-        return domain_features
-
-    def update_stats(self):
-        eps = 1e-5
-        for l in self._style_codes.keys():
-            if self._style_codes[l]:
-                mean = getattr(self, f'mean_{l}')
-                std = getattr(self, f'std_{l}')
-                # for i in range(len(self.embeds[l])):
-                #     self.embeds[l][i] = self.embeds[l][i].to('cuda:0')
-                feat = torch.stack(self._style_codes[l], dim=0)
-                _, C = feat.size()
-                correction = int(len(self._style_codes[l]) > 1)
-                feat_var = feat.var(dim=0, correction=correction) + eps
-                feat_std = feat_var.sqrt()
-                feat_mean = feat.mean(dim=0)
-                mean[:], std[:] = feat_mean, feat_std
-                self._style_codes[l] = self._style_codes[l][-self._num_tracked_style_code:]
-
     def forward(self, x_ref, y_ref, num_embeds, z_trg=None):
-        if self._inference_running_stats:
-            style_codes = self.sample_style_codes(z_trg, y_ref)
-        else:
-            features = self.extract_features(x_ref, num_embeds)
-            style_codes = self.reduce_dimension(features)
+        features = self.extract_features(x_ref, num_embeds)
+        return features
 
-            # update running stats
-            if self._track_running_stats:
-                for y, style_code in zip(y_ref, style_codes.clone().detach().cpu()):
-                    self._style_codes[y.item()] += [style_code]
-        return style_codes
 
-    def sample_style_codes(self, z_trg, y_ref):
-        assert z_trg is not None, 'z_trg must be provided when inference_running_stats is True'
-        assert z_trg.dim() == 2, 'z_trg must be 2D tensor'
-        with torch.no_grad():
-            style_codes = torch.zeros_like(z_trg)
-            for i, (label, noise_vector) in enumerate(zip(y_ref, z_trg)):
-                mean = getattr(self, f'mean_{label.item()}')
-                std = getattr(self, f'std_{label.item()}')
-                style_codes[i] = noise_vector * std * self._std_weight + mean
-            return style_codes
-
-    def set_std_weight(self, std_weight):
-        self._std_weight = std_weight
-
-    @property
-    def track_running_stats(self):
-        return self._track_running_stats
-
-    @track_running_stats.setter
-    def track_running_stats(self, track_running_stats):
-        self._track_running_stats = track_running_stats
-
-    @property
-    def inference_running_stats(self):
-        return self._inference_running_stats
-
-    @inference_running_stats.setter
-    def inference_running_stats(self, inference_running_stats):
-        self._inference_running_stats = inference_running_stats
+# class FeatureExtractor(nn.Module):
+#     def __init__(self, num_domains, embed_nc=768, hidden_nc=256):
+#         super().__init__()
+#
+#         self.hidden_nc = hidden_nc
+#         self.num_domains = num_domains
+#         self.extractor = ViTForImageClassification. \
+#             from_pretrained(f'google/vit-base-patch16-224', output_hidden_states=True).eval()
+#         self.extractor.requires_grad_(False)
+#         self.resize = transforms.Resize((224, 224), antialias=False)
+#         self.unshared = nn.Linear(embed_nc, hidden_nc)
+#         self.actv = nn.ReLU()
+#         self._style_codes = None
+#         self.track_running_stats = False
+#         self.inference_running_stats = False
+#         self._num_tracked_style_code = 10_000
+#         self._std_weight = 1
+#         self._create_stats()
+#
+#     def _create_stats(self):
+#         labels = torch.arange(self.num_domains)
+#         for l in labels:
+#             self.register_buffer(f'mean_{l.item()}', torch.zeros(self.hidden_nc))
+#             self.register_buffer(f'std_{l.item()}', torch.zeros(self.hidden_nc))
+#         self._style_codes = {l.item(): [] for l in labels}
+#
+#     def extract_features(self, x_ref, num_embeds):
+#         """
+#         :param x_ref: (N, num_embeds, C, H, W) or (N, C, H, W)
+#         :param num_embeds: int if want a random number from 1 to num_embeds or -int if want a fixed number of num_embeds
+#         :return: (N, num_embeds, embed_nc) or (N, embed_nc)
+#         """
+#         if x_ref.dim() == 5:
+#             if num_embeds > 0:
+#                 num_embeds = random.randint(1, num_embeds)
+#             else:
+#                 num_embeds = -num_embeds
+#             N = x_ref.size(0)
+#             x_ref = self.resize(x_ref[:, :num_embeds].reshape(-1, *(x_ref.size()[-3:])))
+#             inputs = {'pixel_values': x_ref}
+#             out_vit = self.extractor(**inputs)
+#             s_trg = out_vit.hidden_states[-1][:, 0, :].reshape(N, num_embeds, -1)
+#         elif x_ref.dim() == 4:
+#             x_ref = self.resize(x_ref)
+#             inputs = {'pixel_values': x_ref}
+#             out_vit = self.extractor(**inputs)
+#             s_trg = out_vit.hidden_states[-1][:, 0, :].unsqueeze(1)
+#         else:
+#             raise NotImplementedError(f'Wrong dimension [{x_ref.dim()}]')
+#         return s_trg
+#
+#     def reduce_dimension(self, features):
+#         domain_features = self.unshared(self.actv(features))
+#         # (n, hidden_nc) or (n, num_embeds, hidden_nc)
+#         if domain_features.dim() == 3:
+#             domain_features = domain_features.mean(dim=1)  # (batch, hidden_nc)
+#         return domain_features
+#
+#     def update_stats(self):
+#         eps = 1e-5
+#         for l in self._style_codes.keys():
+#             if self._style_codes[l]:
+#                 mean = getattr(self, f'mean_{l}')
+#                 std = getattr(self, f'std_{l}')
+#                 # for i in range(len(self.embeds[l])):
+#                 #     self.embeds[l][i] = self.embeds[l][i].to('cuda:0')
+#                 feat = torch.stack(self._style_codes[l], dim=0)
+#                 _, C = feat.size()
+#                 correction = int(len(self._style_codes[l]) > 1)
+#                 feat_var = feat.var(dim=0, correction=correction) + eps
+#                 feat_std = feat_var.sqrt()
+#                 feat_mean = feat.mean(dim=0)
+#                 mean[:], std[:] = feat_mean, feat_std
+#                 self._style_codes[l] = self._style_codes[l][-self._num_tracked_style_code:]
+#
+#     def forward(self, x_ref, y_ref, num_embeds, z_trg=None):
+#         if self._inference_running_stats:
+#             style_codes = self.sample_style_codes(z_trg, y_ref)
+#         else:
+#             features = self.extract_features(x_ref, num_embeds)
+#             style_codes = self.reduce_dimension(features)
+#
+#             # update running stats
+#             if self._track_running_stats:
+#                 for y, style_code in zip(y_ref, style_codes.clone().detach().cpu()):
+#                     self._style_codes[y.item()] += [style_code]
+#         return style_codes
+#
+#     def sample_style_codes(self, z_trg, y_ref):
+#         assert z_trg is not None, 'z_trg must be provided when inference_running_stats is True'
+#         assert z_trg.dim() == 2, 'z_trg must be 2D tensor'
+#         with torch.no_grad():
+#             style_codes = torch.zeros_like(z_trg)
+#             for i, (label, noise_vector) in enumerate(zip(y_ref, z_trg)):
+#                 mean = getattr(self, f'mean_{label.item()}')
+#                 std = getattr(self, f'std_{label.item()}')
+#                 style_codes[i] = noise_vector * std * self._std_weight + mean
+#             return style_codes
+#
+#     def set_std_weight(self, std_weight):
+#         self._std_weight = std_weight
+#
+#     @property
+#     def track_running_stats(self):
+#         return self._track_running_stats
+#
+#     @track_running_stats.setter
+#     def track_running_stats(self, track_running_stats):
+#         self._track_running_stats = track_running_stats
+#
+#     @property
+#     def inference_running_stats(self):
+#         return self._inference_running_stats
+#
+#     @inference_running_stats.setter
+#     def inference_running_stats(self, inference_running_stats):
+#         self._inference_running_stats = inference_running_stats
 
 
 def build_model(args):

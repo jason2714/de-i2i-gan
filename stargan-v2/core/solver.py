@@ -294,20 +294,20 @@ class Solver(nn.Module):
             self._reset_grad()
             g_loss.backward()
             optims.generator.step()
-            if args.norm_type == 'sean':
-                optims.feature_extractor.step()
+            # if args.norm_type == 'sean':
+            #     optims.feature_extractor.step()
 
             # compute moving average of network parameters
-            nets.feature_extractor.module.update_stats()
+            nets.generator.module.update_stats()
+            # nets.feature_extractor.module.update_stats()
 
             # # compute moving average of network parameters
             moving_average(nets.generator, nets_ema.generator, beta=0.999)
             if args.norm_type == 'adain':
                 moving_average(nets.mapping_network, nets_ema.mapping_network, beta=0.999)
                 moving_average(nets.style_encoder, nets_ema.style_encoder, beta=0.999)
-            # TODO temp remove
-            # else:
-            #     moving_average_for_sean_blocks(nets.generator, nets_ema.generator, beta=0.999)
+            else:
+                moving_average_for_sean_blocks(nets.generator, nets_ema.generator, beta=0.999)
             # decay weight for diversity sensitive loss
             if args.lambda_ds > 0:
                 args.lambda_ds -= (initial_lambda_ds / args.ds_iter)
